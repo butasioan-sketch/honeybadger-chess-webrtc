@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'game_screen.dart';
+import 'connection_screen.dart';
 
 void main() => runApp(const HoneyBadgerChessApp());
 
@@ -23,9 +24,15 @@ class HoneyBadgerChessApp extends StatelessWidget {
 class MainMenu extends StatelessWidget {
   const MainMenu({super.key});
 
-  void _open(BuildContext context, bool vsComputer) {
+  void _openGame(BuildContext context, bool vsComputer) {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => GameScreen(vsComputer: vsComputer)),
+    );
+  }
+
+  void _openConnection(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ConnectionScreen()),
     );
   }
 
@@ -49,10 +56,13 @@ class MainMenu extends StatelessWidget {
             ),
             const SizedBox(height: 48),
             _menuButton('Gegen Computer spielen', Colors.green,
-                () => _open(context, true)),
+                () => _openGame(context, true)),
             const SizedBox(height: 16),
             _menuButton('Gegen Freund spielen', Colors.blue,
-                () => _open(context, false)),
+                () => _openGame(context, false)),
+            const SizedBox(height: 16),
+            _menuButton('Online verbinden (Test)', Colors.deepOrange,
+                () => _openConnection(context)),
           ],
         ),
       ),

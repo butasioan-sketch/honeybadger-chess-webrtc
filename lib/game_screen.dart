@@ -12,10 +12,12 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen> {
   late ch.Chess _game;
-  final ChessAI _ai = const ChessAI(depth: 2);
+  int _aiDepth = 2; // 1 = leicht, 2 = mittel, 3 = schwer
   String? _selected;
   Set<String> _targets = {};
   bool _aiThinking = false;
+  String? _lastFrom;
+  String? _lastTo;
 
   @override
   void initState() {
@@ -66,6 +68,8 @@ class _GameScreenState extends State<GameScreen> {
     if (chosen == null) return;
     _game.move(chosen);
     setState(() {
+      _lastFrom = from;
+      _lastTo = to;
       _selected = null;
       _targets = {};
     });
@@ -85,13 +89,15 @@ class _GameScreenState extends State<GameScreen> {
   Future<void> _makeAiMove() async {
     setState(() => _aiThinking = true);
     await Future.delayed(const Duration(milliseconds: 50));
-    final move = _ai.findBestMove(_game);
+    final move = ChessAI(depth: _aiDepth).findBestMove(_game);
     if (move != null) {
       _game.move({
         'from': move.fromAlgebraic,
         'to': move.toAlgebraic,
         if (move.promotion != null) 'promotion': 'q',
       });
+      _lastFrom = move.fromAlgebraic;
+      _lastTo = move.toAlgebraic;
     }
     if (!mounted) return;
     setState(() => _aiThinking = false);
@@ -104,6 +110,24 @@ class _GameScreenState extends State<GameScreen> {
       _selected = null;
       _targets = {};
       _aiThinking = false;
+      _lastFrom = null;
+      _lastTo = null;
+    });
+  }
+
+  void _undo() {
+    if (_aiThinking) return;
+    final undone = _game.undo();
+    if (undone == null) return;
+    // Gegen Computer: auch den eigenen Zug zuruecknehmen, damit Weiss wieder dran ist.
+    if (widget.vsComputer && _game.turn == ch.Chess.BLACK) {
+      _game.undo();
+    }
+    setState(() {
+      _selected = null;
+      _targets = {};
+      _lastFrom = null;
+      _lastTo = null;
     });
   }
 
@@ -167,12 +191,35 @@ class _GameScreenState extends State<GameScreen> {
     return '\u265F';
   }
 
+  String _difficultyLabel() {
+    if (_aiDepth == 1) return 'Leicht';
+    if (_aiDepth == 3) return 'Schwer';
+    return 'Mittel';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Honey Badger Chess'),
         actions: [
+          if (widget.vsComputer)
+            PopupMenuButton<int>(
+              tooltip: 'Schwierigkeit',
+              initialValue: _aiDepth,
+              icon: const Icon(Icons.tune),
+              onSelected: (v) => setState(() => _aiDepth = v),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 1, child: Text('Leicht')),
+                PopupMenuItem(value: 2, child: Text('Mittel')),
+                PopupMenuItem(value: 3, child: Text('Schwer')),
+              ],
+            ),
+          IconButton(
+            tooltip: 'Zug zurueck',
+            icon: const Icon(Icons.undo),
+            onPressed: _undo,
+          ),
           IconButton(
             tooltip: 'Neues Spiel',
             icon: const Icon(Icons.refresh),
@@ -213,7 +260,7 @@ class _GameScreenState extends State<GameScreen> {
             padding: const EdgeInsets.all(16),
             child: Text(
               widget.vsComputer
-                  ? 'Du spielst Weiss (unten)'
+                  ? 'Du spielst Weiss (unten)  -  Stufe: ${_difficultyLabel()}'
                   : 'Lokales 2-Spieler-Spiel',
               style: const TextStyle(color: Colors.white38),
             ),
@@ -243,57 +290,84 @@ class _GameScreenState extends State<GameScreen> {
   Widget _buildSquare(String square, int row, int col) {
     final isLight = (row + col) % 2 == 0;
     final base = isLight ? const Color(0xFFEEEED2) : const Color(0xFF769656);
+    final labelColor =
+        isLight ? const Color(0xFF769656) : const Color(0xFFEEEED2);
     final piece = _game.get(square);
     final isSelected = square == _selected;
     final isTarget = _targets.contains(square);
+    final isLastMove = square == _lastFrom || square == _lastTo;
+    final rank = 8 - row;
+    final file = String.fromCharCode('a'.codeUnitAt(0) + col);
 
     return GestureDetector(
       onTap: () => _onSquareTap(square),
       child: Container(
         color: isSelected ? const Color(0xFFBBCB2B) : base,
         child: Stack(
-          alignment: Alignment.center,
           children: [
+            if (isLastMove && !isSelected)
+              Positioned.fill(child: Container(color: const Color(0x55FFEB3B))),
+            if (col == 0)
+              Positioned(
+                top: 1,
+                left: 2,
+                child: Text('$rank',
+                    style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        color: labelColor)),
+              ),
+            if (row == 7)
+              Positioned(
+                bottom: 1,
+                right: 2,
+                child: Text(file,
+                    style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        color: labelColor)),
+              ),
             if (isTarget && piece == null)
-              Container(
-                width: 16,
-                height: 16,
-                decoration: const BoxDecoration(
-                  color: Color(0x55000000),
-                  shape: BoxShape.circle,
+              Center(
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  decoration: const BoxDecoration(
+                    color: Color(0x55000000),
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ),
             if (isTarget && piece != null)
               Positioned.fill(
                 child: Container(
                   decoration: BoxDecoration(
-                    border: Border.all(
-                      color: const Color(0xCCD32F2F),
-                      width: 3,
-                    ),
+                    border:
+                        Border.all(color: const Color(0xCCD32F2F), width: 3),
                   ),
                 ),
               ),
             if (piece != null)
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Padding(
-                  padding: const EdgeInsets.all(2),
-                  child: Text(
-                    _glyph(piece.type),
-                    style: TextStyle(
-                      fontSize: 100,
-                      height: 1,
-                      color: piece.color == ch.Chess.WHITE
-                          ? const Color(0xFFFAFAFA)
-                          : const Color(0xFF1A1A1A),
-                      shadows: const [
-                        Shadow(
-                          blurRadius: 1.5,
-                          color: Color(0x99000000),
-                          offset: Offset(0, 1),
-                        ),
-                      ],
+              Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: Text(
+                      _glyph(piece.type),
+                      style: TextStyle(
+                        fontSize: 100,
+                        height: 1,
+                        color: piece.color == ch.Chess.WHITE
+                            ? const Color(0xFFFAFAFA)
+                            : const Color(0xFF1A1A1A),
+                        shadows: const [
+                          Shadow(
+                              blurRadius: 1.5,
+                              color: Color(0x99000000),
+                              offset: Offset(0, 1)),
+                        ],
+                      ),
                     ),
                   ),
                 ),
