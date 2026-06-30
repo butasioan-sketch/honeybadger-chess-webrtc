@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'crypto_service.dart';
 
 class ConnectionScreen extends StatefulWidget {
   const ConnectionScreen({super.key});
@@ -15,12 +16,14 @@ enum _Role { none, host, guest }
 class _ConnectionScreenState extends State<ConnectionScreen> {
   RTCPeerConnection? _pc;
   RTCDataChannel? _channel;
+  final CryptoService _crypto = CryptoService();
   _Role _role = _Role.none;
   bool _connected = false;
   bool _busy = false;
   String _status = 'Noch nicht verbunden';
 
   String _localCode = '';
+  String _lastCipher = '';
   final TextEditingController _remoteCtrl = TextEditingController();
   final TextEditingController _msgCtrl = TextEditingController();
   final List<String> _log = [];
@@ -40,13 +43,13 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     super.dispose();
   }
 
-  String _encode(RTCSessionDescription d) =>
-      base64Encode(utf8.encode(jsonEncode({'sdp': d.sdp, 'type': d.type})));
+  // Signal-Code = SDP + Typ + oeffentlicher Schluessel, alles in einem Base64-Blob.
+  String _encodeSignal(RTCSessionDescription d, List<int> pub) =>
+      base64Encode(utf8.encode(jsonEncode(
+          {'sdp': d.sdp, 'type': d.type, 'pub': base64Encode(pub)})));
 
-  RTCSessionDescription _decode(String code) {
-    final map = jsonDecode(utf8.decode(base64Decode(code.trim())));
-    return RTCSessionDescription(map['sdp'], map['type']);
-  }
+  Map<String, dynamic> _decodeSignal(String code) =>
+      jsonDecode(utf8.decode(base64Decode(code.trim())));
 
   Future<RTCSessionDescription> _gatherComplete() async {
     final completer = Completer<void>();
@@ -64,10 +67,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   void _setupCommon() {
     _pc!.onConnectionState = (state) {
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
-        setState(() {
-          _connected = true;
-          _status = 'Verbunden!';
-        });
+        setState(() => _connected = true);
       } else if (state ==
               RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
           state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
@@ -81,14 +81,24 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
 
   void _bindChannel(RTCDataChannel ch) {
     _channel = ch;
-    ch.onMessage = (RTCDataChannelMessage msg) {
-      setState(() => _log.add('Freund: ${msg.text}'));
+    ch.onMessage = (RTCDataChannelMessage msg) async {
+      if (!_crypto.isReady) return;
+      try {
+        final clear = await _crypto.decrypt(msg.text);
+        if (!mounted) return;
+        setState(() => _log.add('Freund:  $clear'));
+      } catch (e) {
+        if (!mounted) return;
+        setState(() => _log.add('[nicht entschluesselbar]'));
+      }
     };
     ch.onDataChannelState = (state) {
       if (state == RTCDataChannelState.RTCDataChannelOpen) {
         setState(() {
           _connected = true;
-          _status = 'Verbunden! Kanal offen.';
+          _status = _crypto.isReady
+              ? 'Verbunden & Ende-zu-Ende verschluesselt.'
+              : 'Verbunden (kein Schluessel!).';
         });
       }
     };
@@ -100,15 +110,17 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       _role = _Role.host;
       _status = 'Erstelle Einladung ...';
     });
+    await _crypto.generateKeyPair();
+    final myPub = await _crypto.myPublicKeyBytes();
     _pc = await createPeerConnection(_config);
     _setupCommon();
-    final ch = await _pc!.createDataChannel('chess', RTCDataChannelInit());
-    _bindChannel(ch);
+    final dc = await _pc!.createDataChannel('chess', RTCDataChannelInit());
+    _bindChannel(dc);
     final offer = await _pc!.createOffer();
     await _pc!.setLocalDescription(offer);
     final full = await _gatherComplete();
     setState(() {
-      _localCode = _encode(full);
+      _localCode = _encodeSignal(full, myPub);
       _busy = false;
       _status = 'Einladungs-Code bereit. An Freund schicken.';
     });
@@ -121,16 +133,18 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       _status = 'Verbinde ...';
     });
     try {
-      final answer = _decode(_remoteCtrl.text);
-      await _pc!.setRemoteDescription(answer);
+      final data = _decodeSignal(_remoteCtrl.text);
+      await _crypto.deriveSharedKey(base64Decode(data['pub']));
+      await _pc!.setRemoteDescription(
+          RTCSessionDescription(data['sdp'], data['type']));
       setState(() {
         _busy = false;
-        _status = 'Antwort angenommen, verbinde ...';
+        _status = 'Schluessel ausgetauscht, verbinde ...';
       });
     } catch (e) {
       setState(() {
         _busy = false;
-        _status = 'Fehler: Code ungueltig';
+        _status = 'Fehler: Antwort-Code ungueltig';
       });
     }
   }
@@ -139,22 +153,27 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     if (_remoteCtrl.text.trim().isEmpty) return;
     setState(() {
       _busy = true;
+      _role = _Role.guest;
       _status = 'Erstelle Antwort ...';
     });
     try {
+      await _crypto.generateKeyPair();
+      final myPub = await _crypto.myPublicKeyBytes();
+      final data = _decodeSignal(_remoteCtrl.text);
+      await _crypto.deriveSharedKey(base64Decode(data['pub']));
       _pc = await createPeerConnection(_config);
       _setupCommon();
-      _pc!.onDataChannel = (RTCDataChannel ch) => _bindChannel(ch);
-      final offer = _decode(_remoteCtrl.text);
-      await _pc!.setRemoteDescription(offer);
+      _pc!.onDataChannel = (dc) => _bindChannel(dc);
+      await _pc!.setRemoteDescription(
+          RTCSessionDescription(data['sdp'], data['type']));
       final answer = await _pc!.createAnswer();
       await _pc!.setLocalDescription(answer);
       final full = await _gatherComplete();
       setState(() {
-        _localCode = _encode(full);
+        _localCode = _encodeSignal(full, myPub);
         _remoteCtrl.clear();
         _busy = false;
-        _status = 'Antwort-Code bereit. Zurueck an Freund schicken.';
+        _status = 'Antwort-Code bereit. Zurueck schicken.';
       });
     } catch (e) {
       setState(() {
@@ -164,12 +183,15 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     }
   }
 
-  void _send() {
+  Future<void> _send() async {
     final text = _msgCtrl.text.trim();
-    if (text.isEmpty || _channel == null) return;
-    _channel!.send(RTCDataChannelMessage(text));
+    if (text.isEmpty || _channel == null || !_crypto.isReady) return;
+    final encrypted = await _crypto.encrypt(text);
+    _channel!.send(RTCDataChannelMessage(encrypted));
+    if (!mounted) return;
     setState(() {
-      _log.add('Ich: $text');
+      _log.add('Ich:  $text');
+      _lastCipher = encrypted;
       _msgCtrl.clear();
     });
   }
@@ -185,7 +207,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Online verbinden (Test)')),
+      appBar: AppBar(title: const Text('Online verbinden (verschluesselt)')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -214,8 +236,8 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
 
   List<Widget> _roleChooser() => [
         const Text(
-          'Einer lädt ein, der andere tritt bei. Tausche die Codes einmal '
-          'über WhatsApp o.ä. aus.',
+          'Einer lädt ein, der andere tritt bei. Die Schluessel reisen im Code '
+          'mit - ab dem Handschlag ist alles Ende-zu-Ende verschluesselt.',
           style: TextStyle(color: Colors.white70),
         ),
         const SizedBox(height: 20),
@@ -242,9 +264,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: Colors.white10,
-            borderRadius: BorderRadius.circular(6),
-          ),
+              color: Colors.white10, borderRadius: BorderRadius.circular(6)),
           child: SelectableText(code,
               maxLines: 4, style: const TextStyle(fontSize: 11)),
         ),
@@ -259,10 +279,8 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   Widget _pasteField(String hint) => TextField(
         controller: _remoteCtrl,
         maxLines: 3,
-        decoration: InputDecoration(
-          hintText: hint,
-          border: const OutlineInputBorder(),
-        ),
+        decoration:
+            InputDecoration(hintText: hint, border: const OutlineInputBorder()),
       );
 
   List<Widget> _hostUi() => [
@@ -272,8 +290,8 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
             child: Center(child: CircularProgressIndicator()),
           ),
         if (_localCode.isNotEmpty) ...[
-          ..._codeBox('1. Diesen Einladungs-Code an den Freund schicken:',
-              _localCode),
+          ..._codeBox(
+              '1. Diesen Einladungs-Code an den Freund schicken:', _localCode),
           const SizedBox(height: 20),
           const Text('2. Antwort-Code des Freundes hier einfügen:',
               style: TextStyle(fontWeight: FontWeight.bold)),
@@ -299,7 +317,8 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
         ),
         if (_localCode.isNotEmpty) ...[
           const SizedBox(height: 20),
-          ..._codeBox('2. Diesen Antwort-Code zurück an den Freund schicken:',
+          ..._codeBox(
+              '2. Diesen Antwort-Code zurück an den Freund schicken:',
               _localCode),
         ],
       ];
@@ -307,16 +326,14 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   List<Widget> _chatUi() => [
         const SizedBox(height: 20),
         const Divider(),
-        const Text('Test-Nachricht (beweist, dass die Leitung steht):',
+        const Text('Verschluesselter Test-Chat:',
             style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         Container(
-          height: 160,
+          height: 150,
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: Colors.white10,
-            borderRadius: BorderRadius.circular(6),
-          ),
+              color: Colors.white10, borderRadius: BorderRadius.circular(6)),
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -331,14 +348,30 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
               child: TextField(
                 controller: _msgCtrl,
                 decoration: const InputDecoration(
-                  hintText: 'Nachricht ...',
-                  border: OutlineInputBorder(),
-                ),
+                    hintText: 'Nachricht ...', border: OutlineInputBorder()),
               ),
             ),
             const SizedBox(width: 8),
             ElevatedButton(onPressed: _send, child: const Text('Senden')),
           ],
         ),
+        if (_lastCipher.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          const Text('Das ging WIRKLICH ueber die Leitung (Geheimtext):',
+              style: TextStyle(fontSize: 12, color: Colors.white54)),
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+                color: Colors.black, borderRadius: BorderRadius.circular(6)),
+            child: Text(
+              _lastCipher.length > 80
+                  ? '${_lastCipher.substring(0, 80)} ...'
+                  : _lastCipher,
+              style: const TextStyle(
+                  fontSize: 10, color: Colors.greenAccent, fontFamily: 'monospace'),
+            ),
+          ),
+        ],
       ];
 }

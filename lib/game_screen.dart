@@ -119,7 +119,6 @@ class _GameScreenState extends State<GameScreen> {
     if (_aiThinking) return;
     final undone = _game.undo();
     if (undone == null) return;
-    // Gegen Computer: auch den eigenen Zug zuruecknehmen, damit Weiss wieder dran ist.
     if (widget.vsComputer && _game.turn == ch.Chess.BLACK) {
       _game.undo();
     }
@@ -305,8 +304,18 @@ class _GameScreenState extends State<GameScreen> {
         color: isSelected ? const Color(0xFFBBCB2B) : base,
         child: Stack(
           children: [
+            // Letzter Zug: dezenter goldener Rahmen statt greller Flaeche.
             if (isLastMove && !isSelected)
-              Positioned.fill(child: Container(color: const Color(0x55FFEB3B))),
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: const Color(0xAAB58B00),
+                      width: 3,
+                    ),
+                  ),
+                ),
+              ),
             if (col == 0)
               Positioned(
                 top: 1,
