@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:chess/chess.dart' as ch;
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'crypto_service.dart';
+import 'move_codec.dart';
 
 /// Schach ueber die bereits verbundene, verschluesselte WebRTC-Leitung.
 /// Der Host spielt Weiss, der Gast Schwarz. Jeder Zug wird verschluesselt
@@ -39,9 +39,9 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
     widget.channel.onMessage = (RTCDataChannelMessage msg) async {
       try {
         final clear = await widget.crypto.decrypt(msg.text);
-        final data = jsonDecode(clear);
-        if (data['t'] == 'move') {
-          _applyRemoteMove(data['from'], data['to']);
+        final move = decodeMovePayload(clear);
+        if (move != null) {
+          _applyRemoteMove(move.from, move.to);
         }
       } catch (_) {
         // Nachricht ignorieren, wenn sie nicht lesbar ist.
@@ -77,17 +77,7 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
   }
 
   Future<void> _makeLocalMove(String from, String to) async {
-    final moves = _game.generate_moves({'square': from});
-    ch.Move? chosen;
-    for (final m in moves) {
-      if (m.toAlgebraic == to) {
-        if (m.promotion == null || m.promotion == ch.Chess.QUEEN) {
-          chosen = m;
-          break;
-        }
-        chosen ??= m;
-      }
-    }
+    final chosen = resolveMove(_game, from, to);
     if (chosen == null) return;
     _game.move(chosen);
     setState(() {
@@ -97,24 +87,14 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
       _targets = {};
     });
     // Zug verschluesselt an den Gegner schicken.
-    final payload = jsonEncode({'t': 'move', 'from': from, 'to': to});
+    final payload = encodeMovePayload(from, to);
     final encrypted = await widget.crypto.encrypt(payload);
     widget.channel.send(RTCDataChannelMessage(encrypted));
     _checkEnd();
   }
 
   void _applyRemoteMove(String from, String to) {
-    final moves = _game.generate_moves({'square': from});
-    ch.Move? chosen;
-    for (final m in moves) {
-      if (m.toAlgebraic == to) {
-        if (m.promotion == null || m.promotion == ch.Chess.QUEEN) {
-          chosen = m;
-          break;
-        }
-        chosen ??= m;
-      }
-    }
+    final chosen = resolveMove(_game, from, to);
     if (chosen == null) return;
     _game.move(chosen);
     if (!mounted) return;
