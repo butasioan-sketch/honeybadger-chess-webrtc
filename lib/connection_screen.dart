@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'crypto_service.dart';
+import 'online_game_screen.dart';
 
 class ConnectionScreen extends StatefulWidget {
   const ConnectionScreen({super.key});
@@ -85,6 +86,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       if (!_crypto.isReady) return;
       try {
         final clear = await _crypto.decrypt(msg.text);
+        if (clear == '__START__') { _openBoard(false); return; }
         if (!mounted) return;
         setState(() => _log.add('Freund:  $clear'));
       } catch (e) {
@@ -204,6 +206,20 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     );
   }
 
+  Future<void> _startAsHost() async {
+    final enc = await _crypto.encrypt('__START__');
+    _channel!.send(RTCDataChannelMessage(enc));
+    _openBoard(true);
+  }
+
+  void _openBoard(bool amWhite) {
+    if (!mounted || _channel == null) return;
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => OnlineGameScreen(
+        channel: _channel!, crypto: _crypto, amWhite: amWhite),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -224,6 +240,18 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                   style: const TextStyle(fontSize: 16)),
             ),
             const SizedBox(height: 16),
+            if (_connected && _role == _Role.host)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: ElevatedButton.icon(
+                  onPressed: _startAsHost,
+                  icon: const Icon(Icons.sports_esports),
+                  label: const Text('SCHACH STARTEN'),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepPurple,
+                      padding: const EdgeInsets.symmetric(vertical: 16)),
+                ),
+              ),
             if (_role == _Role.none) ..._roleChooser(),
             if (_role == _Role.host) ..._hostUi(),
             if (_role == _Role.guest) ..._guestUi(),
