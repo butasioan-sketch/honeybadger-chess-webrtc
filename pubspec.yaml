@@ -38,6 +38,8 @@ dependencies:
   flutter_webrtc: ^1.5.2
   cryptography: ^2.9.0
   shared_preferences: ^2.5.5
+  flutter_cube: ^0.1.1
+  vector_math: ^2.2.0
 
 dev_dependencies:
   flutter_test:

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:chess/chess.dart' as ch;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'chess3d/chess_board_3d.dart';
 import 'chess_ai.dart';
 import 'widgets/chess_board_view.dart';
 
@@ -22,6 +23,7 @@ class _GameScreenState extends State<GameScreen> {
   bool _aiThinking = false;
   String? _lastFrom;
   String? _lastTo;
+  bool _use3D = false;
 
   @override
   void initState() {
@@ -211,6 +213,11 @@ class _GameScreenState extends State<GameScreen> {
       appBar: AppBar(
         title: const Text('Honey Badger Chess'),
         actions: [
+          IconButton(
+            tooltip: _use3D ? 'Zu 2D wechseln' : 'Zu 3D wechseln',
+            icon: Icon(_use3D ? Icons.grid_on : Icons.view_in_ar),
+            onPressed: () => setState(() => _use3D = !_use3D),
+          ),
           if (widget.vsComputer)
             PopupMenuButton<int>(
               tooltip: 'Schwierigkeit',
@@ -259,14 +266,23 @@ class _GameScreenState extends State<GameScreen> {
                 aspectRatio: 1,
                 child: Padding(
                   padding: const EdgeInsets.all(8),
-                  child: ChessBoardView(
-                    game: _game,
-                    selected: _selected,
-                    targets: _targets,
-                    lastFrom: _lastFrom,
-                    lastTo: _lastTo,
-                    onSquareTap: _onSquareTap,
-                  ),
+                  child: _use3D
+                      ? ChessBoard3D(
+                          game: _game,
+                          selected: _selected,
+                          targets: _targets,
+                          lastFrom: _lastFrom,
+                          lastTo: _lastTo,
+                          onSquareTap: _onSquareTap,
+                        )
+                      : ChessBoardView(
+                          game: _game,
+                          selected: _selected,
+                          targets: _targets,
+                          lastFrom: _lastFrom,
+                          lastTo: _lastTo,
+                          onSquareTap: _onSquareTap,
+                        ),
                 ),
               ),
             ),
