@@ -15,14 +15,30 @@
 >   `scripts/hbc_status.sh`, `lib/core/rendering/piece_renderer.dart`,
 >   `i2p_overlay_service.dart`, `chess_codec.dart`, `dashboard_screen.dart`
 >   usw. wurden auf diesem Rechner nirgends gefunden.
-> - Der tatsächliche Stand: eine 2D-Flutter-Schach-App mit Unicode-Glyphen
->   als Figuren, lokalem Negamax-KI-Gegner, und WebRTC-P2P-Multiplayer mit
->   Ende-zu-Ende-Verschlüsselung (kein I2P, kein 3D). Details im laufenden
->   Statuslog: [`../../../Schreibtisch/MeinVault/Projekte/HoneyBadgerChess.md`]
->   bzw. der Commit-Historie dieses Repos.
+> - Der tatsächliche Stand am 2026-08-31: eine 2D-Flutter-Schach-App mit
+>   Unicode-Glyphen als Figuren, lokalem Negamax-KI-Gegner, WebRTC-P2P-
+>   Multiplayer mit Ende-zu-Ende-Verschlüsselung - **plus inzwischen zwei
+>   Teile dieser Vision tatsächlich umgesetzt** (nach Ruecksprache mit
+>   Jonny, mit bewusst realistischerem Zuschnitt statt 1:1 wie unten
+>   beschrieben):
+>   - **Visueller Chess-Cipher** (`lib/visual_chess_cipher.dart`,
+>     `lib/cipher_screen.dart`): Text ↔ verschlüsselte Zugfolge, echt
+>     funktionsfähig, im Menü unter "Visueller Cipher".
+>   - **Echtes leichtes 3D-Brett** (`lib/chess3d/`): prozedural erzeugte
+>     Low-Poly-Figuren, echte Phong-Beleuchtung, Orbit-Kamera - über das
+>     Package `flutter_cube` (Software-Renderer), nicht über eine
+>     Unity-Engine oder heruntergeladene 3D-Assets wie unten in Sektion 8-9
+>     beschrieben. Umschaltbar per Icon im Spiel und im Cipher-Playback.
+>   - **I2P wurde bewusst NICHT umgesetzt** (Sektionen 15-19 unten sind
+>     weiterhin reine Zukunftsvision) - technisch in Flutter kaum sauber
+>     machbar, WebRTC-E2E-Verschlüsselung bleibt die Lösung.
+>   Details/Verifikation: [`../../../Schreibtisch/MeinVault/Projekte/HoneyBadgerChess.md`]
+>   bzw. der Commit-Historie dieses Repos (Commits `4b2b08b`..`5459844`).
 >
-> Diese Datei ist also **Produktvision/Ideensammlung für eine mögliche
-> Zukunft**, nicht Beschreibung des Ist-Zustands. Jede künftige KI-Sitzung
+> Der Rest dieser Datei ist weiterhin **Produktvision/Ideensammlung**,
+> nicht Beschreibung des kompletten Ist-Zustands (z.B. sind Dateien wie
+> `hbc_push.sh` oder `i2p_overlay_service.dart` weiterhin erfunden). Jede
+> künftige KI-Sitzung
 > (auch ich selbst später) sollte zuerst `git log`, `flutter analyze` und
 > die tatsächlichen Dateien in `lib/` prüfen, bevor sie sich auf Aussagen
 > in diesem Dokument verlässt.
