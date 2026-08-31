@@ -57,4 +57,20 @@ void main() {
       expect(decoded, isNull);
     });
   });
+
+  group('encodeResignPayload / isResignPayload', () {
+    test('Round-Trip erkennt eine Aufgabe', () {
+      final payload = encodeResignPayload();
+      expect(isResignPayload(payload), isTrue);
+    });
+
+    test('ein Zug ist keine Aufgabe', () {
+      final payload = encodeMovePayload('e2', 'e4');
+      expect(isResignPayload(payload), isFalse);
+    });
+
+    test('kaputtes JSON ergibt false statt einer Exception', () {
+      expect(isResignPayload('{nicht valides json'), isFalse);
+    });
+  });
 }

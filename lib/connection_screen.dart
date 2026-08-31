@@ -45,9 +45,11 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   }
 
   // Signal-Code = SDP + Typ + oeffentlicher Schluessel, alles in einem Base64-Blob.
-  String _encodeSignal(RTCSessionDescription d, List<int> pub) =>
-      base64Encode(utf8.encode(jsonEncode(
-          {'sdp': d.sdp, 'type': d.type, 'pub': base64Encode(pub)})));
+  String _encodeSignal(RTCSessionDescription d, List<int> pub) => base64Encode(
+    utf8.encode(
+      jsonEncode({'sdp': d.sdp, 'type': d.type, 'pub': base64Encode(pub)}),
+    ),
+  );
 
   Map<String, dynamic> _decodeSignal(String code) =>
       jsonDecode(utf8.decode(base64Decode(code.trim())));
@@ -59,8 +61,10 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
         if (!completer.isCompleted) completer.complete();
       }
     };
-    await completer.future
-        .timeout(const Duration(seconds: 4), onTimeout: () {});
+    await completer.future.timeout(
+      const Duration(seconds: 4),
+      onTimeout: () {},
+    );
     final desc = await _pc!.getLocalDescription();
     return desc!;
   }
@@ -69,8 +73,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     _pc!.onConnectionState = (state) {
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
         setState(() => _connected = true);
-      } else if (state ==
-              RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
           state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
         setState(() {
           _connected = false;
@@ -86,7 +89,10 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       if (!_crypto.isReady) return;
       try {
         final clear = await _crypto.decrypt(msg.text);
-        if (clear == '__START__') { _openBoard(false); return; }
+        if (clear == '__START__') {
+          _openBoard(false);
+          return;
+        }
         if (!mounted) return;
         setState(() => _log.add('Freund:  $clear'));
       } catch (e) {
@@ -138,7 +144,8 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       final data = _decodeSignal(_remoteCtrl.text);
       await _crypto.deriveSharedKey(base64Decode(data['pub']));
       await _pc!.setRemoteDescription(
-          RTCSessionDescription(data['sdp'], data['type']));
+        RTCSessionDescription(data['sdp'], data['type']),
+      );
       setState(() {
         _busy = false;
         _status = 'Schluessel ausgetauscht, verbinde ...';
@@ -167,7 +174,8 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       _setupCommon();
       _pc!.onDataChannel = (dc) => _bindChannel(dc);
       await _pc!.setRemoteDescription(
-          RTCSessionDescription(data['sdp'], data['type']));
+        RTCSessionDescription(data['sdp'], data['type']),
+      );
       final answer = await _pc!.createAnswer();
       await _pc!.setLocalDescription(answer);
       final full = await _gatherComplete();
@@ -202,7 +210,9 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-          content: Text('Code kopiert'), duration: Duration(seconds: 1)),
+        content: Text('Code kopiert'),
+        duration: Duration(seconds: 1),
+      ),
     );
   }
 
@@ -214,10 +224,16 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
 
   void _openBoard(bool amWhite) {
     if (!mounted || _channel == null) return;
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => OnlineGameScreen(
-        channel: _channel!, crypto: _crypto, amWhite: amWhite),
-    ));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OnlineGameScreen(
+          channel: _channel!,
+          crypto: _crypto,
+          amWhite: amWhite,
+          peerConnection: _pc,
+        ),
+      ),
+    );
   }
 
   @override
@@ -235,9 +251,11 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                 color: _connected ? Colors.green.shade800 : Colors.black,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(_status,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 16)),
+              child: Text(
+                _status,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 16),
+              ),
             ),
             const SizedBox(height: 16),
             if (_connected && _role == _Role.host)
@@ -248,8 +266,9 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                   icon: const Icon(Icons.sports_esports),
                   label: const Text('SCHACH STARTEN'),
                   style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple,
-                      padding: const EdgeInsets.symmetric(vertical: 16)),
+                    backgroundColor: Colors.deepPurple,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
                 ),
               ),
             if (_role == _Role.none) ..._roleChooser(),
@@ -263,143 +282,172 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   }
 
   List<Widget> _roleChooser() => [
-        const Text(
-          'Einer lädt ein, der andere tritt bei. Die Schluessel reisen im Code '
-          'mit - ab dem Handschlag ist alles Ende-zu-Ende verschluesselt.',
-          style: TextStyle(color: Colors.white70),
-        ),
-        const SizedBox(height: 20),
-        ElevatedButton(
-          onPressed: _busy ? null : _startHost,
-          style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              padding: const EdgeInsets.symmetric(vertical: 14)),
-          child: const Text('Einladen (Code erstellen)'),
-        ),
-        const SizedBox(height: 12),
-        ElevatedButton(
-          onPressed: _busy ? null : () => setState(() => _role = _Role.guest),
-          style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              padding: const EdgeInsets.symmetric(vertical: 14)),
-          child: const Text('Beitreten (Code eingeben)'),
-        ),
-      ];
+    const Text(
+      'Einer lädt ein, der andere tritt bei. Die Schluessel reisen im Code '
+      'mit - ab dem Handschlag ist alles Ende-zu-Ende verschluesselt.',
+      style: TextStyle(color: Colors.white70),
+    ),
+    const SizedBox(height: 20),
+    ElevatedButton(
+      onPressed: _busy ? null : _startHost,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.green,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+      ),
+      child: const Text('Einladen (Code erstellen)'),
+    ),
+    const SizedBox(height: 12),
+    ElevatedButton(
+      onPressed: _busy ? null : () => setState(() => _role = _Role.guest),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.blue,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+      ),
+      child: const Text('Beitreten (Code eingeben)'),
+    ),
+  ];
 
   List<Widget> _codeBox(String label, String code) => [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-              color: Colors.white10, borderRadius: BorderRadius.circular(6)),
-          child: SelectableText(code,
-              maxLines: 4, style: const TextStyle(fontSize: 11)),
-        ),
-        const SizedBox(height: 6),
-        OutlinedButton.icon(
-          onPressed: () => _copy(code),
-          icon: const Icon(Icons.copy, size: 18),
-          label: const Text('Code kopieren'),
-        ),
-      ];
+    Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+    const SizedBox(height: 6),
+    Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white10,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: SelectableText(
+        code,
+        maxLines: 4,
+        style: const TextStyle(fontSize: 11),
+      ),
+    ),
+    const SizedBox(height: 6),
+    OutlinedButton.icon(
+      onPressed: () => _copy(code),
+      icon: const Icon(Icons.copy, size: 18),
+      label: const Text('Code kopieren'),
+    ),
+  ];
 
   Widget _pasteField(String hint) => TextField(
-        controller: _remoteCtrl,
-        maxLines: 3,
-        decoration:
-            InputDecoration(hintText: hint, border: const OutlineInputBorder()),
-      );
+    controller: _remoteCtrl,
+    maxLines: 3,
+    decoration: InputDecoration(
+      hintText: hint,
+      border: const OutlineInputBorder(),
+    ),
+  );
 
   List<Widget> _hostUi() => [
-        if (_busy && _localCode.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(20),
-            child: Center(child: CircularProgressIndicator()),
-          ),
-        if (_localCode.isNotEmpty) ...[
-          ..._codeBox(
-              '1. Diesen Einladungs-Code an den Freund schicken:', _localCode),
-          const SizedBox(height: 20),
-          const Text('2. Antwort-Code des Freundes hier einfügen:',
-              style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 6),
-          _pasteField('Antwort-Code einfügen ...'),
-          const SizedBox(height: 8),
-          ElevatedButton(
-            onPressed: _busy ? null : _hostAcceptAnswer,
-            child: const Text('Verbinden'),
-          ),
-        ],
-      ];
+    if (_busy && _localCode.isEmpty)
+      const Padding(
+        padding: EdgeInsets.all(20),
+        child: Center(child: CircularProgressIndicator()),
+      ),
+    if (_localCode.isNotEmpty) ...[
+      ..._codeBox(
+        '1. Diesen Einladungs-Code an den Freund schicken:',
+        _localCode,
+      ),
+      const SizedBox(height: 20),
+      const Text(
+        '2. Antwort-Code des Freundes hier einfügen:',
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      const SizedBox(height: 6),
+      _pasteField('Antwort-Code einfügen ...'),
+      const SizedBox(height: 8),
+      ElevatedButton(
+        onPressed: _busy ? null : _hostAcceptAnswer,
+        child: const Text('Verbinden'),
+      ),
+    ],
+  ];
 
   List<Widget> _guestUi() => [
-        const Text('1. Einladungs-Code des Freundes einfügen:',
-            style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
-        _pasteField('Einladungs-Code einfügen ...'),
-        const SizedBox(height: 8),
-        ElevatedButton(
-          onPressed: _busy ? null : _guestCreateAnswer,
-          child: const Text('Antwort erstellen'),
-        ),
-        if (_localCode.isNotEmpty) ...[
-          const SizedBox(height: 20),
-          ..._codeBox(
-              '2. Diesen Antwort-Code zurück an den Freund schicken:',
-              _localCode),
-        ],
-      ];
+    const Text(
+      '1. Einladungs-Code des Freundes einfügen:',
+      style: TextStyle(fontWeight: FontWeight.bold),
+    ),
+    const SizedBox(height: 6),
+    _pasteField('Einladungs-Code einfügen ...'),
+    const SizedBox(height: 8),
+    ElevatedButton(
+      onPressed: _busy ? null : _guestCreateAnswer,
+      child: const Text('Antwort erstellen'),
+    ),
+    if (_localCode.isNotEmpty) ...[
+      const SizedBox(height: 20),
+      ..._codeBox(
+        '2. Diesen Antwort-Code zurück an den Freund schicken:',
+        _localCode,
+      ),
+    ],
+  ];
 
   List<Widget> _chatUi() => [
-        const SizedBox(height: 20),
-        const Divider(),
-        const Text('Verschluesselter Test-Chat:',
-            style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        Container(
-          height: 150,
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-              color: Colors.white10, borderRadius: BorderRadius.circular(6)),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: _log.map((l) => Text(l)).toList(),
+    const SizedBox(height: 20),
+    const Divider(),
+    const Text(
+      'Verschluesselter Test-Chat:',
+      style: TextStyle(fontWeight: FontWeight.bold),
+    ),
+    const SizedBox(height: 8),
+    Container(
+      height: 150,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.white10,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: _log.map((l) => Text(l)).toList(),
+        ),
+      ),
+    ),
+    const SizedBox(height: 8),
+    Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _msgCtrl,
+            decoration: const InputDecoration(
+              hintText: 'Nachricht ...',
+              border: OutlineInputBorder(),
             ),
           ),
         ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _msgCtrl,
-                decoration: const InputDecoration(
-                    hintText: 'Nachricht ...', border: OutlineInputBorder()),
-              ),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton(onPressed: _send, child: const Text('Senden')),
-          ],
+        const SizedBox(width: 8),
+        ElevatedButton(onPressed: _send, child: const Text('Senden')),
+      ],
+    ),
+    if (_lastCipher.isNotEmpty) ...[
+      const SizedBox(height: 12),
+      const Text(
+        'Das ging WIRKLICH ueber die Leitung (Geheimtext):',
+        style: TextStyle(fontSize: 12, color: Colors.white54),
+      ),
+      const SizedBox(height: 4),
+      Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(6),
         ),
-        if (_lastCipher.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          const Text('Das ging WIRKLICH ueber die Leitung (Geheimtext):',
-              style: TextStyle(fontSize: 12, color: Colors.white54)),
-          const SizedBox(height: 4),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-                color: Colors.black, borderRadius: BorderRadius.circular(6)),
-            child: Text(
-              _lastCipher.length > 80
-                  ? '${_lastCipher.substring(0, 80)} ...'
-                  : _lastCipher,
-              style: const TextStyle(
-                  fontSize: 10, color: Colors.greenAccent, fontFamily: 'monospace'),
-            ),
+        child: Text(
+          _lastCipher.length > 80
+              ? '${_lastCipher.substring(0, 80)} ...'
+              : _lastCipher,
+          style: const TextStyle(
+            fontSize: 10,
+            color: Colors.greenAccent,
+            fontFamily: 'monospace',
           ),
-        ],
-      ];
+        ),
+      ),
+    ],
+  ];
 }

@@ -38,3 +38,16 @@ String encodeMovePayload(String from, String to) {
     return null;
   }
 }
+
+/// Baut die verschluesselbare Nutzlast fuer eine Aufgabe.
+String encodeResignPayload() => jsonEncode({'t': 'resign'});
+
+/// Prueft, ob eine entschluesselte Nachricht eine Aufgabe ist.
+bool isResignPayload(String clearText) {
+  try {
+    final data = jsonDecode(clearText);
+    return data is Map && data['t'] == 'resign';
+  } catch (_) {
+    return false;
+  }
+}

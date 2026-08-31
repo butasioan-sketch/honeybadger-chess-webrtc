@@ -12,12 +12,14 @@ class OnlineGameScreen extends StatefulWidget {
   final RTCDataChannel channel;
   final CryptoService crypto;
   final bool amWhite; // Host = true (Weiss), Gast = false (Schwarz)
+  final RTCPeerConnection? peerConnection;
 
   const OnlineGameScreen({
     super.key,
     required this.channel,
     required this.crypto,
     required this.amWhite,
+    this.peerConnection,
   });
 
   @override
@@ -30,6 +32,8 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
   Set<String> _targets = {};
   String? _lastFrom;
   String? _lastTo;
+  bool _gameEnded = false;
+  bool _peerConnected = true;
 
   @override
   void initState() {
@@ -39,6 +43,10 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
     widget.channel.onMessage = (RTCDataChannelMessage msg) async {
       try {
         final clear = await widget.crypto.decrypt(msg.text);
+        if (isResignPayload(clear)) {
+          _endGame('Der Gegner hat aufgegeben - du gewinnst!');
+          return;
+        }
         final move = decodeMovePayload(clear);
         if (move != null) {
           _applyRemoteMove(move.from, move.to);
@@ -47,12 +55,84 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
         // Nachricht ignorieren, wenn sie nicht lesbar ist.
       }
     };
+    widget.channel.onDataChannelState = (state) {
+      if (state == RTCDataChannelState.RTCDataChannelClosed ||
+          state == RTCDataChannelState.RTCDataChannelClosing) {
+        _handleDisconnect();
+      }
+    };
+    widget.peerConnection?.onConnectionState = (state) {
+      if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+          state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
+          state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+        _handleDisconnect();
+      }
+    };
+  }
+
+  void _handleDisconnect() {
+    if (!mounted || _gameEnded) return;
+    setState(() => _peerConnected = false);
+    _endGame('Verbindung zum Gegner verloren.');
+  }
+
+  Future<void> _resign() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Aufgeben?'),
+        content: const Text('Willst du die Partie wirklich aufgeben?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Aufgeben'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || _gameEnded) return;
+    if (_peerConnected) {
+      try {
+        final payload = encodeResignPayload();
+        final encrypted = await widget.crypto.encrypt(payload);
+        widget.channel.send(RTCDataChannelMessage(encrypted));
+      } catch (_) {
+        // Wenn das Senden fehlschlaegt, trotzdem lokal beenden.
+      }
+    }
+    _endGame('Du hast aufgegeben.');
+  }
+
+  void _endGame(String msg) {
+    if (!mounted || _gameEnded) return;
+    _gameEnded = true;
+    setState(() {});
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Spiel beendet'),
+        content: Text(msg),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              Navigator.of(context).pop();
+            },
+            child: const Text('Zurueck'),
+          ),
+        ],
+      ),
+    );
   }
 
   bool get _myTurn => (_game.turn == ch.Chess.WHITE) == widget.amWhite;
 
   void _onSquareTap(String square) {
-    if (_game.game_over || !_myTurn) return;
+    if (_game.game_over || !_myTurn || _gameEnded) return;
 
     if (_selected != null && _targets.contains(square)) {
       _makeLocalMove(_selected!, square);
@@ -117,26 +197,11 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
     } else {
       msg = 'Remis.';
     }
-    if (!mounted) return;
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Spiel beendet'),
-        content: Text(msg),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              Navigator.of(context).pop();
-            },
-            child: const Text('Zurueck'),
-          ),
-        ],
-      ),
-    );
+    _endGame(msg);
   }
 
   String _status() {
+    if (!_peerConnected) return 'Verbindung verloren';
     if (_game.game_over) {
       if (_game.in_checkmate) return 'Schachmatt';
       return 'Remis';
@@ -159,6 +224,13 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Online-Schach (${widget.amWhite ? "Weiss" : "Schwarz"})'),
+        actions: [
+          IconButton(
+            tooltip: 'Aufgeben',
+            icon: const Icon(Icons.flag),
+            onPressed: (_gameEnded || _game.game_over) ? null : _resign,
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -240,7 +312,9 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
                 child: Container(
                   decoration: BoxDecoration(
                     border: Border.all(
-                        color: const Color(0xAAB58B00), width: 3),
+                      color: const Color(0xAAB58B00),
+                      width: 3,
+                    ),
                   ),
                 ),
               ),
@@ -260,7 +334,9 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
                 child: Container(
                   decoration: BoxDecoration(
                     border: Border.all(
-                        color: const Color(0xCCD32F2F), width: 3),
+                      color: const Color(0xCCD32F2F),
+                      width: 3,
+                    ),
                   ),
                 ),
               ),
@@ -280,9 +356,10 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
                             : const Color(0xFF1A1A1A),
                         shadows: const [
                           Shadow(
-                              blurRadius: 1.5,
-                              color: Color(0x99000000),
-                              offset: Offset(0, 1)),
+                            blurRadius: 1.5,
+                            color: Color(0x99000000),
+                            offset: Offset(0, 1),
+                          ),
                         ],
                       ),
                     ),
