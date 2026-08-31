@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:chess/chess.dart' as ch;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'chess_ai.dart';
+
+const _aiDepthPrefsKey = 'ai_depth';
 
 class GameScreen extends StatefulWidget {
   final bool vsComputer;
@@ -23,6 +26,20 @@ class _GameScreenState extends State<GameScreen> {
   void initState() {
     super.initState();
     _game = ch.Chess();
+    _loadDifficulty();
+  }
+
+  Future<void> _loadDifficulty() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getInt(_aiDepthPrefsKey);
+    if (saved == null || !mounted) return;
+    setState(() => _aiDepth = saved);
+  }
+
+  Future<void> _setDifficulty(int depth) async {
+    setState(() => _aiDepth = depth);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_aiDepthPrefsKey, depth);
   }
 
   bool get _isHumanTurn {
@@ -207,7 +224,7 @@ class _GameScreenState extends State<GameScreen> {
               tooltip: 'Schwierigkeit',
               initialValue: _aiDepth,
               icon: const Icon(Icons.tune),
-              onSelected: (v) => setState(() => _aiDepth = v),
+              onSelected: _setDifficulty,
               itemBuilder: (_) => const [
                 PopupMenuItem(value: 1, child: Text('Leicht')),
                 PopupMenuItem(value: 2, child: Text('Mittel')),
@@ -289,8 +306,9 @@ class _GameScreenState extends State<GameScreen> {
   Widget _buildSquare(String square, int row, int col) {
     final isLight = (row + col) % 2 == 0;
     final base = isLight ? const Color(0xFFEEEED2) : const Color(0xFF769656);
-    final labelColor =
-        isLight ? const Color(0xFF769656) : const Color(0xFFEEEED2);
+    final labelColor = isLight
+        ? const Color(0xFF769656)
+        : const Color(0xFFEEEED2);
     final piece = _game.get(square);
     final isSelected = square == _selected;
     final isTarget = _targets.contains(square);
@@ -320,21 +338,27 @@ class _GameScreenState extends State<GameScreen> {
               Positioned(
                 top: 1,
                 left: 2,
-                child: Text('$rank',
-                    style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        color: labelColor)),
+                child: Text(
+                  '$rank',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: labelColor,
+                  ),
+                ),
               ),
             if (row == 7)
               Positioned(
                 bottom: 1,
                 right: 2,
-                child: Text(file,
-                    style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        color: labelColor)),
+                child: Text(
+                  file,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: labelColor,
+                  ),
+                ),
               ),
             if (isTarget && piece == null)
               Center(
@@ -351,8 +375,10 @@ class _GameScreenState extends State<GameScreen> {
               Positioned.fill(
                 child: Container(
                   decoration: BoxDecoration(
-                    border:
-                        Border.all(color: const Color(0xCCD32F2F), width: 3),
+                    border: Border.all(
+                      color: const Color(0xCCD32F2F),
+                      width: 3,
+                    ),
                   ),
                 ),
               ),
@@ -372,9 +398,10 @@ class _GameScreenState extends State<GameScreen> {
                             : const Color(0xFF1A1A1A),
                         shadows: const [
                           Shadow(
-                              blurRadius: 1.5,
-                              color: Color(0x99000000),
-                              offset: Offset(0, 1)),
+                            blurRadius: 1.5,
+                            color: Color(0x99000000),
+                            offset: Offset(0, 1),
+                          ),
                         ],
                       ),
                     ),

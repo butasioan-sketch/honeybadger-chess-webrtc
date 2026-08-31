@@ -37,6 +37,7 @@ dependencies:
   chess: ^0.8.1
   flutter_webrtc: ^1.5.2
   cryptography: ^2.9.0
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:
