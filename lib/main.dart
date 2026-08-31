@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'game_screen.dart';
 import 'connection_screen.dart';
+import 'cipher_screen.dart';
 
 void main() => runApp(const HoneyBadgerChessApp());
 
@@ -31,9 +32,15 @@ class MainMenu extends StatelessWidget {
   }
 
   void _openConnection(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ConnectionScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ConnectionScreen()));
+  }
+
+  void _openCipher(BuildContext context) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const CipherScreen()));
   }
 
   @override
@@ -55,14 +62,29 @@ class MainMenu extends StatelessWidget {
               style: TextStyle(fontSize: 14, color: Colors.white54),
             ),
             const SizedBox(height: 48),
-            _menuButton('Gegen Computer spielen', Colors.green,
-                () => _openGame(context, true)),
+            _menuButton(
+              'Gegen Computer spielen',
+              Colors.green,
+              () => _openGame(context, true),
+            ),
             const SizedBox(height: 16),
-            _menuButton('Gegen Freund spielen', Colors.blue,
-                () => _openGame(context, false)),
+            _menuButton(
+              'Gegen Freund spielen',
+              Colors.blue,
+              () => _openGame(context, false),
+            ),
             const SizedBox(height: 16),
-            _menuButton('Online verbinden (Test)', Colors.deepOrange,
-                () => _openConnection(context)),
+            _menuButton(
+              'Online verbinden (Test)',
+              Colors.deepOrange,
+              () => _openConnection(context),
+            ),
+            const SizedBox(height: 16),
+            _menuButton(
+              'Visueller Cipher',
+              Colors.purple,
+              () => _openCipher(context),
+            ),
           ],
         ),
       ),
