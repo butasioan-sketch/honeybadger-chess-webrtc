@@ -4,6 +4,7 @@ import 'package:chess/chess.dart' as ch;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'chess3d/chess_board_3d.dart';
 import 'visual_chess_cipher.dart';
 import 'widgets/chess_board_view.dart';
 
@@ -362,6 +363,7 @@ class _CipherPlaybackBoardState extends State<_CipherPlaybackBoard> {
   Timer? _timer;
   bool _playing = false;
   Duration _step = _normalStep;
+  bool _use3D = false;
 
   @override
   void initState() {
@@ -446,11 +448,13 @@ class _CipherPlaybackBoardState extends State<_CipherPlaybackBoard> {
       children: [
         AspectRatio(
           aspectRatio: 1,
-          child: ChessBoardView(
-            game: _game,
-            lastFrom: _lastFrom,
-            lastTo: _lastTo,
-          ),
+          child: _use3D
+              ? ChessBoard3D(game: _game, lastFrom: _lastFrom, lastTo: _lastTo)
+              : ChessBoardView(
+                  game: _game,
+                  lastFrom: _lastFrom,
+                  lastTo: _lastTo,
+                ),
         ),
         const SizedBox(height: 8),
         Text(
@@ -461,6 +465,11 @@ class _CipherPlaybackBoardState extends State<_CipherPlaybackBoard> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            IconButton(
+              tooltip: _use3D ? 'Zu 2D wechseln' : 'Zu 3D wechseln',
+              icon: Icon(_use3D ? Icons.grid_on : Icons.view_in_ar),
+              onPressed: () => setState(() => _use3D = !_use3D),
+            ),
             IconButton(
               tooltip: _playing ? 'Pause' : 'Abspielen',
               icon: Icon(_playing ? Icons.pause : Icons.play_arrow),
