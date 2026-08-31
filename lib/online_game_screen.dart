@@ -4,6 +4,7 @@ import 'package:chess/chess.dart' as ch;
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'crypto_service.dart';
 import 'move_codec.dart';
+import 'widgets/chess_board_view.dart';
 
 /// Schach ueber die bereits verbundene, verschluesselte WebRTC-Leitung.
 /// Der Host spielt Weiss, der Gast Schwarz. Jeder Zug wird verschluesselt
@@ -210,15 +211,6 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
     return (_myTurn ? 'Du bist am Zug' : 'Gegner ist am Zug') + check;
   }
 
-  String _glyph(ch.PieceType t) {
-    if (t == ch.Chess.KING) return '\u265A';
-    if (t == ch.Chess.QUEEN) return '\u265B';
-    if (t == ch.Chess.ROOK) return '\u265C';
-    if (t == ch.Chess.BISHOP) return '\u265D';
-    if (t == ch.Chess.KNIGHT) return '\u265E';
-    return '\u265F';
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -256,7 +248,15 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
                 aspectRatio: 1,
                 child: Padding(
                   padding: const EdgeInsets.all(8),
-                  child: _buildBoard(),
+                  child: ChessBoardView(
+                    game: _game,
+                    selected: _selected,
+                    targets: _targets,
+                    lastFrom: _lastFrom,
+                    lastTo: _lastTo,
+                    flipped: !widget.amWhite,
+                    onSquareTap: _onSquareTap,
+                  ),
                 ),
               ),
             ),
@@ -269,105 +269,6 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildBoard() {
-    // Schwarz sieht das Brett gedreht.
-    return Column(
-      children: List.generate(8, (r) {
-        final row = widget.amWhite ? r : 7 - r;
-        return Expanded(
-          child: Row(
-            children: List.generate(8, (c) {
-              final col = widget.amWhite ? c : 7 - c;
-              final rank = 8 - row;
-              final file = String.fromCharCode('a'.codeUnitAt(0) + col);
-              final square = '$file$rank';
-              return Expanded(child: _buildSquare(square, row, col));
-            }),
-          ),
-        );
-      }),
-    );
-  }
-
-  Widget _buildSquare(String square, int row, int col) {
-    final isLight = (row + col) % 2 == 0;
-    final base = isLight ? const Color(0xFFEEEED2) : const Color(0xFF769656);
-    final piece = _game.get(square);
-    final isSelected = square == _selected;
-    final isTarget = _targets.contains(square);
-    final isLastMove = square == _lastFrom || square == _lastTo;
-
-    return GestureDetector(
-      onTap: () => _onSquareTap(square),
-      child: Container(
-        color: isSelected ? const Color(0xFFBBCB2B) : base,
-        child: Stack(
-          children: [
-            if (isLastMove && !isSelected)
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: const Color(0xAAB58B00),
-                      width: 3,
-                    ),
-                  ),
-                ),
-              ),
-            if (isTarget && piece == null)
-              Center(
-                child: Container(
-                  width: 16,
-                  height: 16,
-                  decoration: const BoxDecoration(
-                    color: Color(0x55000000),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-            if (isTarget && piece != null)
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: const Color(0xCCD32F2F),
-                      width: 3,
-                    ),
-                  ),
-                ),
-              ),
-            if (piece != null)
-              Center(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Padding(
-                    padding: const EdgeInsets.all(2),
-                    child: Text(
-                      _glyph(piece.type),
-                      style: TextStyle(
-                        fontSize: 100,
-                        height: 1,
-                        color: piece.color == ch.Chess.WHITE
-                            ? const Color(0xFFFAFAFA)
-                            : const Color(0xFF1A1A1A),
-                        shadows: const [
-                          Shadow(
-                            blurRadius: 1.5,
-                            color: Color(0x99000000),
-                            offset: Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
       ),
     );
   }
