@@ -82,6 +82,12 @@ class _EncoderTabState extends State<_EncoderTab> {
   }
 
   Future<void> _encode() async {
+    if (_passCtrl.text.length < minPassphraseLength) {
+      setState(
+        () => _error = 'Passwort zu kurz (mind. $minPassphraseLength Zeichen).',
+      );
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;

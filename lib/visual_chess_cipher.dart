@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:chess/chess.dart' as ch;
 import 'package:cryptography/cryptography.dart';
+import 'package:flutter/foundation.dart' show compute, visibleForTesting;
 
 /// Der "visuelle Cipher": eine mit Passwort verschluesselte Nachricht wird
 /// als Folge legaler Schachzuege ab der Grundstellung dargestellt (UCI-
@@ -28,21 +29,58 @@ class VisualChessCipherError implements Exception {
 
 const int maxCipherPlies = 900;
 const int _saltLength = 16;
-const int _pbkdf2Iterations = 20000;
+const int _pbkdf2Iterations = 100000;
+const int minPassphraseLength = 8;
 
 final Cipher _cipher = Chacha20.poly1305Aead();
-final Pbkdf2 _kdf = Pbkdf2.hmacSha256(iterations: _pbkdf2Iterations, bits: 256);
 
 List<int> _randomBytes(int length) {
   final rnd = Random.secure();
   return List<int>.generate(length, (_) => rnd.nextInt(256));
 }
 
-Future<SecretKey> _deriveKey(String passphrase, List<int> salt) {
-  return _kdf.deriveKey(
-    secretKey: SecretKey(utf8.encode(passphrase)),
-    nonce: salt,
+/// Parameter fuer die PBKDF2-Ableitung in einem separaten Isolate (siehe
+/// [_deriveKey]) - muessen isolate-sicher (keine Closures) sein. Nur wegen
+/// [deriveKeyBytesRunner]/[deriveKeyBytesInline] (Test-Ersatz fuer
+/// [compute]) oeffentlich, kein Teil der eigentlichen API.
+@visibleForTesting
+class KdfRequest {
+  final List<int> passphraseBytes;
+  final List<int> salt;
+  const KdfRequest(this.passphraseBytes, this.salt);
+}
+
+Future<List<int>> _deriveKeyBytesInIsolate(KdfRequest req) async {
+  final kdf = Pbkdf2.hmacSha256(iterations: _pbkdf2Iterations, bits: 256);
+  final key = await kdf.deriveKey(
+    secretKey: SecretKey(req.passphraseBytes),
+    nonce: req.salt,
   );
+  return key.extractBytes();
+}
+
+/// Fuehrt die PBKDF2-Berechnung aus - per Default in einem separaten
+/// Isolate ueber [compute], damit die rechenintensiven Runden nicht die UI
+/// blockieren. `compute()` haengt sich innerhalb von `testWidgets()`
+/// (TestWidgetsFlutterBinding) nachweislich auf (bestaetigt mit einem
+/// Minimal-Repro ganz ohne Cipher-Code - ein Flutter-Testumgebungs-Problem,
+/// kein Fehler in dieser Datei); Widget-Tests koennen diese Funktion daher
+/// durch eine Variante ohne echtes Isolate ersetzen.
+@visibleForTesting
+Future<List<int>> Function(KdfRequest request) deriveKeyBytesRunner = (req) =>
+    compute(_deriveKeyBytesInIsolate, req);
+
+/// Direkter Aufruf ohne Isolate - fuer Tests, die [deriveKeyBytesRunner]
+/// ueberschreiben wollen.
+@visibleForTesting
+Future<List<int>> deriveKeyBytesInline(KdfRequest req) =>
+    _deriveKeyBytesInIsolate(req);
+
+Future<SecretKey> _deriveKey(String passphrase, List<int> salt) async {
+  final bytes = await deriveKeyBytesRunner(
+    KdfRequest(utf8.encode(passphrase), salt),
+  );
+  return SecretKey(bytes);
 }
 
 BigInt _bytesToBigInt(List<int> bytes) {
@@ -70,6 +108,35 @@ Uint8List _bigIntToBytes(BigInt n) {
 String moveKey(ch.Move m) =>
     '${m.fromAlgebraic}${m.toAlgebraic}${m.promotion?.toString() ?? ''}';
 
+/// Prueft, ob [move] die Stellung sofort beendet (Matt oder Patt fuer den
+/// Gegner - danach gibt es keine legalen Zuege mehr). Zieht auf demselben
+/// Objekt und macht den Zug direkt danach rueckgaengig (wie die KI-Suche in
+/// chess_ai.dart) statt `game.copy()` zu nutzen - bei ~900 moeglichen
+/// Halbzuegen x ~20-40 Kandidatenzuegen je Halbzug macht das den
+/// Unterschied zwischen Millisekunden und einem spuerbaren Einfrieren.
+bool _endsGame(ch.Chess game, ch.Move move) {
+  game.make_move(move);
+  final blocked = game.generate_moves().isEmpty;
+  game.undo_move();
+  return blocked;
+}
+
+/// Liefert die legalen Zuege an der aktuellen Stelle, deterministisch
+/// sortiert (nicht auf die interne Reihenfolge von `generate_moves()`
+/// verlassen - die ist nirgends als stabile Schnittstelle dokumentiert).
+/// Zuege, die die Partie sofort beenden (Matt/Patt), werden herausgefiltert,
+/// solange es noch mindestens einen anderen Zug gibt - sonst koennte der
+/// Zufallsweg durchs Brett vorzeitig abbrechen, obwohl noch Daten fehlen.
+/// Encoder und Decoder rufen exakt dieselbe Funktion auf, das Ergebnis
+/// bleibt also bijektiv.
+List<ch.Move> _cipherAlphabet(ch.Chess game) {
+  final legal = game.generate_moves()
+    ..sort((a, b) => moveKey(a).compareTo(moveKey(b)));
+  if (legal.isEmpty) return legal;
+  final nonTerminal = legal.where((m) => !_endsGame(game, m)).toList();
+  return nonTerminal.isNotEmpty ? nonTerminal : legal;
+}
+
 List<String> _bigIntToMoves(BigInt value) {
   final game = ch.Chess();
   final moves = <String>[];
@@ -82,17 +149,17 @@ List<String> _bigIntToMoves(BigInt value) {
         'kuerzeres Passwort verwenden.',
       );
     }
-    final legal = game.generate_moves();
-    if (legal.isEmpty) {
+    final alphabet = _cipherAlphabet(game);
+    if (alphabet.isEmpty) {
       throw VisualChessCipherError(
         'Der Cipher ist mitten in der Kodierung in eine Endstellung '
         '(Matt/Patt) geraten. Bitte Nachricht oder Passwort aendern.',
       );
     }
-    final count = BigInt.from(legal.length);
+    final count = BigInt.from(alphabet.length);
     final idx = (remaining % count).toInt();
     remaining = remaining ~/ count;
-    final chosen = legal[idx];
+    final chosen = alphabet[idx];
     moves.add(moveKey(chosen));
     game.move(chosen);
   }
@@ -104,17 +171,17 @@ BigInt _movesToBigInt(List<String> moves) {
   final counts = <int>[];
   final indices = <int>[];
   for (final key in moves) {
-    final legal = game.generate_moves();
-    final idx = legal.indexWhere((m) => moveKey(m) == key);
+    final alphabet = _cipherAlphabet(game);
+    final idx = alphabet.indexWhere((m) => moveKey(m) == key);
     if (idx == -1) {
       throw VisualChessCipherError(
         'Ungueltiger oder an dieser Stelle unmoeglicher Zug in der '
         'Zugfolge: "$key".',
       );
     }
-    counts.add(legal.length);
+    counts.add(alphabet.length);
     indices.add(idx);
-    game.move(legal[idx]);
+    game.move(alphabet[idx]);
   }
   var value = BigInt.zero;
   for (var i = moves.length - 1; i >= 0; i--) {

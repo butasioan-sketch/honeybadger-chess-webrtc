@@ -68,5 +68,15 @@ void main() {
         throwsA(isA<VisualChessCipherError>()),
       );
     });
+
+    test('~300 Zeichen lange Nachricht kodiert zuverlaessig ohne '
+        'Matt/Patt-Abbruch (Endstellungen werden aktiv vermieden)', () async {
+      final text = 'Der Honigdachs schlaegt zu. ' * 11; // ~308 Zeichen
+      for (var i = 0; i < 5; i++) {
+        final moves = await encodeTextAsMoves(text, 'ein-langes-passwort');
+        final decoded = await decodeMovesAsText(moves, 'ein-langes-passwort');
+        expect(decoded, text);
+      }
+    });
   });
 }
