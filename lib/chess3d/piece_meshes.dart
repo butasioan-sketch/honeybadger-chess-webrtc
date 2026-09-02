@@ -142,7 +142,7 @@ RawMesh _knightMesh() {
   ];
   return _extrudeOutline(
     outline,
-    depth: 0.16,
+    depth: 0.30,
     baseRadius: _baseRadius,
     baseHeight: _baseHeight,
   );

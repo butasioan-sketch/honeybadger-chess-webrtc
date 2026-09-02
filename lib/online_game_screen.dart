@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:chess/chess.dart' as ch;
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'board_mode_prefs.dart';
+import 'chess3d/chess_board_3d.dart';
 import 'crypto_service.dart';
 import 'move_codec.dart';
 import 'widgets/chess_board_view.dart';
@@ -35,11 +37,13 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
   String? _lastTo;
   bool _gameEnded = false;
   bool _peerConnected = true;
+  bool _use3D = false;
 
   @override
   void initState() {
     super.initState();
     _game = ch.Chess();
+    _loadBoardMode();
     // Eingehende Nachrichten dieser Leitung ab jetzt hier verarbeiten.
     widget.channel.onMessage = (RTCDataChannelMessage msg) async {
       try {
@@ -69,6 +73,17 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
         _handleDisconnect();
       }
     };
+  }
+
+  Future<void> _loadBoardMode() async {
+    final use3D = await loadUse3DBoard();
+    if (!mounted) return;
+    setState(() => _use3D = use3D);
+  }
+
+  void _toggleBoardMode() {
+    setState(() => _use3D = !_use3D);
+    saveUse3DBoard(_use3D);
   }
 
   void _handleDisconnect() {
@@ -218,6 +233,11 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
         title: Text('Online-Schach (${widget.amWhite ? "Weiss" : "Schwarz"})'),
         actions: [
           IconButton(
+            tooltip: _use3D ? 'Zu 2D wechseln' : 'Zu 3D wechseln',
+            icon: Icon(_use3D ? Icons.grid_on : Icons.view_in_ar),
+            onPressed: _toggleBoardMode,
+          ),
+          IconButton(
             tooltip: 'Aufgeben',
             icon: const Icon(Icons.flag),
             onPressed: (_gameEnded || _game.game_over) ? null : _resign,
@@ -248,15 +268,25 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
                 aspectRatio: 1,
                 child: Padding(
                   padding: const EdgeInsets.all(8),
-                  child: ChessBoardView(
-                    game: _game,
-                    selected: _selected,
-                    targets: _targets,
-                    lastFrom: _lastFrom,
-                    lastTo: _lastTo,
-                    flipped: !widget.amWhite,
-                    onSquareTap: _onSquareTap,
-                  ),
+                  child: _use3D
+                      ? ChessBoard3D(
+                          game: _game,
+                          selected: _selected,
+                          targets: _targets,
+                          lastFrom: _lastFrom,
+                          lastTo: _lastTo,
+                          flipped: !widget.amWhite,
+                          onSquareTap: _onSquareTap,
+                        )
+                      : ChessBoardView(
+                          game: _game,
+                          selected: _selected,
+                          targets: _targets,
+                          lastFrom: _lastFrom,
+                          lastTo: _lastTo,
+                          flipped: !widget.amWhite,
+                          onSquareTap: _onSquareTap,
+                        ),
                 ),
               ),
             ),

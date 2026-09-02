@@ -4,6 +4,7 @@ import 'package:chess/chess.dart' as ch;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'board_mode_prefs.dart';
 import 'chess3d/chess_board_3d.dart';
 import 'visual_chess_cipher.dart';
 import 'widgets/chess_board_view.dart';
@@ -375,6 +376,18 @@ class _CipherPlaybackBoardState extends State<_CipherPlaybackBoard> {
   void initState() {
     super.initState();
     _game = ch.Chess();
+    _loadBoardMode();
+  }
+
+  Future<void> _loadBoardMode() async {
+    final use3D = await loadUse3DBoard();
+    if (!mounted) return;
+    setState(() => _use3D = use3D);
+  }
+
+  void _toggleBoardMode() {
+    setState(() => _use3D = !_use3D);
+    saveUse3DBoard(_use3D);
   }
 
   @override
@@ -474,7 +487,7 @@ class _CipherPlaybackBoardState extends State<_CipherPlaybackBoard> {
             IconButton(
               tooltip: _use3D ? 'Zu 2D wechseln' : 'Zu 3D wechseln',
               icon: Icon(_use3D ? Icons.grid_on : Icons.view_in_ar),
-              onPressed: () => setState(() => _use3D = !_use3D),
+              onPressed: _toggleBoardMode,
             ),
             IconButton(
               tooltip: _playing ? 'Pause' : 'Abspielen',

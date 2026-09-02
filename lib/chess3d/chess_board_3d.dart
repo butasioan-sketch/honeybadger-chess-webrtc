@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:chess/chess.dart' as ch;
 import 'package:flutter/material.dart';
 import 'package:flutter_cube/flutter_cube.dart' as cube;
@@ -14,6 +16,18 @@ const Color _lightSquareTarget = Color(0xFFE8A33D);
 const Color _darkSquareTarget = Color(0xFFB5762A);
 const Color _lightSquareLastMove = Color(0xFFF5E08A);
 const Color _darkSquareLastMove = Color(0xFFB59B3C);
+const Color _tableColor = Color(0xFF241A12);
+const Color _boardBackground = Color(0xFF14100C);
+
+// Kamera-Grenzen: nie unter das Brett, nie auf die Kante kippen und nie
+// spiegelverkehrt "von unten" enden - Elevation ist der Winkel ueber der
+// Brettebene, in Radiant.
+const double _minElevation = 0.28; // ~16 Grad ueber dem Brett
+const double _maxElevation = 1.45; // ~83 Grad, knapp unter der Draufsicht
+const double _minDistance = 6.0;
+const double _maxDistance = 20.0;
+const double _defaultDistance = 12.08;
+const double _defaultElevation = 0.68; // entspricht der alten Kamera-Pose
 
 final Map<String, RawMesh> _pieceMeshCache = {};
 RawMesh _cachedPieceMesh(ch.PieceType type) {
@@ -21,9 +35,10 @@ RawMesh _cachedPieceMesh(ch.PieceType type) {
 }
 
 /// Echtes 3D-Schachbrett (prozedural erzeugte Low-Poly-Figuren, echte
-/// Phong-Beleuchtung, freie Orbit-Kamera per Drag/Pinch). Bietet dieselbe
-/// Schnittstelle wie [ChessBoardView] (siehe widgets/chess_board_view.dart),
-/// damit beide Darstellungen austauschbar sind.
+/// Phong-Beleuchtung, freie Orbit-Kamera per Drag/Pinch mit festen
+/// Grenzen). Bietet dieselbe Schnittstelle wie [ChessBoardView] (siehe
+/// widgets/chess_board_view.dart), damit beide Darstellungen austauschbar
+/// sind.
 class ChessBoard3D extends StatefulWidget {
   final ch.Chess game;
   final String? selected;
@@ -50,32 +65,44 @@ class ChessBoard3D extends StatefulWidget {
 
 class _ChessBoard3DState extends State<ChessBoard3D> {
   cube.Scene? _scene;
+  double _azimuth = 0;
+  double _elevation = _defaultElevation;
+  double _distance = _defaultDistance;
+  double _gestureStartDistance = _defaultDistance;
 
   void _onSceneCreated(cube.Scene scene) {
     _scene = scene;
     scene.light.position.setValues(2.5, 9.0, -4.0);
-    scene.light.setColor(Colors.white, 0.35, 0.8, 0.35);
+    scene.light.setColor(Colors.white, 0.5, 0.85, 0.35);
     _resetCamera();
     if (mounted) setState(() {});
   }
 
   void _resetCamera() {
+    _azimuth = widget.flipped ? math.pi : 0;
+    _elevation = _defaultElevation;
+    _distance = _defaultDistance;
+    _applyCamera();
+  }
+
+  void _applyCamera() {
     final scene = _scene;
     if (scene == null) return;
-    // Weiss steht auf Rang 1 bei Z=+3.5 (siehe squareCenter3D) - die
-    // Kamera muss also per Default auf der positiven Z-Seite stehen,
-    // damit Weiss unten/nah erscheint (wie beim 2D-Brett).
-    scene.camera.position.setValues(0, 7.6, widget.flipped ? -9.4 : 9.4);
+    final x = _distance * math.cos(_elevation) * math.sin(_azimuth);
+    final y = _distance * math.sin(_elevation);
+    final z = _distance * math.cos(_elevation) * math.cos(_azimuth);
+    scene.camera.position.setValues(x, y, z);
     scene.camera.target.setValues(0, 0, 0);
     scene.camera.up.setValues(0, 1, 0);
     scene.camera.fov = 42;
-    scene.camera.zoom = 1.0;
   }
 
   @override
   void didUpdateWidget(covariant ChessBoard3D oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.flipped != widget.flipped) _resetCamera();
+    if (oldWidget.flipped != widget.flipped) {
+      setState(_resetCamera);
+    }
   }
 
   cube.Material _materialForColor(
@@ -97,8 +124,8 @@ class _ChessBoard3DState extends State<ChessBoard3D> {
     return m;
   }
 
-  cube.Mesh _flatSquareMesh(Color color) {
-    const h = 0.5;
+  cube.Mesh _flatQuadMesh(Color color, double halfSize) {
+    final h = halfSize;
     return cube.Mesh(
       vertices: [
         vm.Vector3(-h, 0, -h),
@@ -107,7 +134,7 @@ class _ChessBoard3DState extends State<ChessBoard3D> {
         vm.Vector3(-h, 0, h),
       ],
       indices: [cube.Polygon(0, 1, 2), cube.Polygon(0, 2, 3)],
-      material: _materialForColor(color),
+      material: _materialForColor(color, ambientFactor: 0.6, shininess: 2),
     );
   }
 
@@ -122,6 +149,19 @@ class _ChessBoard3DState extends State<ChessBoard3D> {
     return isLight ? _lightSquare : _darkSquare;
   }
 
+  void _addTable(cube.Scene scene) {
+    // Ein einfacher, etwas groesserer Untergrund, damit das Brett nicht
+    // frei im schwarzen Nichts zu schweben scheint.
+    final obj = cube.Object(
+      name: 'table',
+      position: vm.Vector3(0, -0.03, 0),
+      mesh: _flatQuadMesh(_tableColor, 5.2),
+      lighting: true,
+      backfaceCulling: false,
+    );
+    scene.world.add(obj);
+  }
+
   void _addBoardSquares(cube.Scene scene) {
     for (var file = 0; file < 8; file++) {
       for (var rank = 1; rank <= 8; rank++) {
@@ -131,7 +171,7 @@ class _ChessBoard3DState extends State<ChessBoard3D> {
         final obj = cube.Object(
           name: 'square_$square',
           position: vm.Vector3(center.x, 0.0, center.z),
-          mesh: _flatSquareMesh(_squareColor(square, isLight)),
+          mesh: _flatQuadMesh(_squareColor(square, isLight), 0.5),
           lighting: true,
           backfaceCulling: false,
         );
@@ -152,8 +192,8 @@ class _ChessBoard3DState extends State<ChessBoard3D> {
           vertices: raw.vertices,
           indices: raw.indices,
           material: _materialForColor(
-            isWhite ? const Color(0xFFF3EFE4) : const Color(0xFF262220),
-            ambientFactor: isWhite ? 0.55 : 0.45,
+            isWhite ? const Color(0xFFF5F1E6) : const Color(0xFF3A342E),
+            ambientFactor: isWhite ? 0.6 : 0.62,
             specular: 0.35,
             shininess: 22,
           ),
@@ -175,6 +215,7 @@ class _ChessBoard3DState extends State<ChessBoard3D> {
     final scene = _scene;
     if (scene == null) return;
     scene.world.children.clear();
+    _addTable(scene);
     _addBoardSquares(scene);
     _addPieces(scene);
   }
@@ -194,12 +235,70 @@ class _ChessBoard3DState extends State<ChessBoard3D> {
     if (square != null) widget.onSquareTap!(square);
   }
 
+  void _handleScaleStart(ScaleStartDetails details) {
+    _gestureStartDistance = _distance;
+  }
+
+  void _handleScaleUpdate(ScaleUpdateDetails details) {
+    setState(() {
+      _azimuth -= details.focalPointDelta.dx * 0.012;
+      _elevation = (_elevation - details.focalPointDelta.dy * 0.012).clamp(
+        _minElevation,
+        _maxElevation,
+      );
+      if (details.scale != 1.0) {
+        _distance = (_gestureStartDistance / details.scale).clamp(
+          _minDistance,
+          _maxDistance,
+        );
+      }
+      _applyCamera();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     _syncSceneObjects();
-    return GestureDetector(
-      onTapUp: _handleTap,
-      child: cube.Cube(onSceneCreated: _onSceneCreated),
+    return Container(
+      color: _boardBackground,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              onTapUp: _handleTap,
+              onScaleStart: _handleScaleStart,
+              onScaleUpdate: _handleScaleUpdate,
+              child: cube.Cube(
+                interactive: false,
+                onSceneCreated: _onSceneCreated,
+              ),
+            ),
+          ),
+          Positioned(
+            right: 8,
+            bottom: 8,
+            child: _ResetCameraButton(onPressed: () => setState(_resetCamera)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResetCameraButton extends StatelessWidget {
+  final VoidCallback onPressed;
+  const _ResetCameraButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black54,
+      shape: const CircleBorder(),
+      child: IconButton(
+        tooltip: 'Kamera zuruecksetzen',
+        icon: const Icon(Icons.center_focus_strong, color: Colors.white70),
+        onPressed: onPressed,
+      ),
     );
   }
 }

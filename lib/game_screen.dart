@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:chess/chess.dart' as ch;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'board_mode_prefs.dart';
 import 'chess3d/chess_board_3d.dart';
 import 'chess_ai.dart';
 import 'widgets/chess_board_view.dart';
@@ -30,6 +31,7 @@ class _GameScreenState extends State<GameScreen> {
     super.initState();
     _game = ch.Chess();
     _loadDifficulty();
+    _loadBoardMode();
   }
 
   Future<void> _loadDifficulty() async {
@@ -37,6 +39,17 @@ class _GameScreenState extends State<GameScreen> {
     final saved = prefs.getInt(_aiDepthPrefsKey);
     if (saved == null || !mounted) return;
     setState(() => _aiDepth = saved);
+  }
+
+  Future<void> _loadBoardMode() async {
+    final use3D = await loadUse3DBoard();
+    if (!mounted) return;
+    setState(() => _use3D = use3D);
+  }
+
+  void _toggleBoardMode() {
+    setState(() => _use3D = !_use3D);
+    saveUse3DBoard(_use3D);
   }
 
   Future<void> _setDifficulty(int depth) async {
@@ -216,7 +229,7 @@ class _GameScreenState extends State<GameScreen> {
           IconButton(
             tooltip: _use3D ? 'Zu 2D wechseln' : 'Zu 3D wechseln',
             icon: Icon(_use3D ? Icons.grid_on : Icons.view_in_ar),
-            onPressed: () => setState(() => _use3D = !_use3D),
+            onPressed: _toggleBoardMode,
           ),
           if (widget.vsComputer)
             PopupMenuButton<int>(
