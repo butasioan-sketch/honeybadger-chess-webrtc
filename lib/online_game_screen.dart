@@ -4,6 +4,7 @@ import 'package:chess/chess.dart' as ch;
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'board_mode_prefs.dart';
 import 'crypto_service.dart';
+import 'hbc_feedback.dart';
 import 'move_codec.dart';
 import 'ui/hbc_theme.dart';
 import 'widgets/board_surface.dart';
@@ -129,6 +130,7 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
   void _endGame(String msg) {
     if (!mounted || _gameEnded) return;
     _gameEnded = true;
+    HbcFeedback.gameEnd();
     setState(() {});
     showDialog<void>(
       context: context,
@@ -178,7 +180,10 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
   Future<void> _makeLocalMove(String from, String to) async {
     final chosen = resolveMove(_game, from, to);
     if (chosen == null) return;
+    final captured = chosen.captured != null;
     _game.move(chosen);
+    captured ? HbcFeedback.capture() : HbcFeedback.move();
+    if (_game.in_check) HbcFeedback.check();
     setState(() {
       _lastFrom = from;
       _lastTo = to;
@@ -209,7 +214,10 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
     if (piece == null || piece.color != opponentColor) return;
     final chosen = resolveMove(_game, from, to);
     if (chosen == null) return;
+    final captured = chosen.captured != null;
     _game.move(chosen);
+    captured ? HbcFeedback.capture() : HbcFeedback.move();
+    if (_game.in_check) HbcFeedback.check();
     if (!mounted) return;
     setState(() {
       _lastFrom = from;

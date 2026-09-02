@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'crypto_service.dart';
+import 'hbc_feedback.dart';
 import 'online_game_screen.dart';
 import 'ui/hbc_theme.dart';
 
@@ -283,10 +284,12 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   }
 
   void _confirmFingerprint() {
+    HbcFeedback.fingerprintConfirmed();
     setState(() => _fingerprintConfirmed = true);
   }
 
   Future<void> _rejectFingerprint() async {
+    HbcFeedback.fingerprintRejected();
     await _channel?.close();
     await _pc?.close();
     if (!mounted) return;

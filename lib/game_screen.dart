@@ -3,6 +3,7 @@ import 'package:chess/chess.dart' as ch;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'board_mode_prefs.dart';
 import 'chess_ai.dart';
+import 'hbc_feedback.dart';
 import 'ui/hbc_theme.dart';
 import 'widgets/board_surface.dart';
 
@@ -99,7 +100,10 @@ class _GameScreenState extends State<GameScreen> {
       }
     }
     if (chosen == null) return;
+    final captured = chosen.captured != null;
     _game.move(chosen);
+    captured ? HbcFeedback.capture() : HbcFeedback.move();
+    if (_game.in_check) HbcFeedback.check();
     setState(() {
       _lastFrom = from;
       _lastTo = to;
@@ -124,11 +128,14 @@ class _GameScreenState extends State<GameScreen> {
     await Future.delayed(const Duration(milliseconds: 50));
     final move = ChessAI(depth: _aiDepth).findBestMove(_game);
     if (move != null) {
+      final captured = move.captured != null;
       _game.move({
         'from': move.fromAlgebraic,
         'to': move.toAlgebraic,
         if (move.promotion != null) 'promotion': 'q',
       });
+      captured ? HbcFeedback.capture() : HbcFeedback.move();
+      if (_game.in_check) HbcFeedback.check();
       _lastFrom = move.fromAlgebraic;
       _lastTo = move.toAlgebraic;
     }
@@ -164,6 +171,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _showResult() {
+    HbcFeedback.gameEnd();
     String msg;
     if (_game.in_checkmate) {
       final winner = _game.turn == ch.Chess.WHITE ? 'Schwarz' : 'Weiss';
