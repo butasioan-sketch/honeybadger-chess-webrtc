@@ -4,6 +4,8 @@ import 'game_screen.dart';
 import 'connection_screen.dart';
 import 'cipher_screen.dart';
 import 'legal_screen.dart';
+import 'onboarding_prefs.dart';
+import 'onboarding_screen.dart';
 import 'support_url.dart';
 import 'ui/hbc_theme.dart';
 
@@ -18,8 +20,51 @@ class HoneyBadgerChessApp extends StatelessWidget {
       title: 'Honey Badger Chess',
       debugShowCheckedModeBanner: false,
       theme: buildHbcTheme(),
-      home: const MainMenu(),
+      home: const _StartupGate(),
     );
+  }
+}
+
+/// Entscheidet beim Start, ob das Onboarding (nur beim allerersten Start)
+/// oder direkt das Hauptmenue gezeigt wird - kurzer leerer Frame statt
+/// Spinner, da shared_preferences praktisch sofort antwortet.
+class _StartupGate extends StatefulWidget {
+  const _StartupGate();
+
+  @override
+  State<_StartupGate> createState() => _StartupGateState();
+}
+
+class _StartupGateState extends State<_StartupGate> {
+  bool? _seen;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final seen = await hasSeenOnboarding();
+    if (!mounted) return;
+    setState(() => _seen = seen);
+  }
+
+  void _onOnboardingDone() {
+    if (!mounted) return;
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => const MainMenu()));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_seen == null) {
+      return const Scaffold(backgroundColor: HbcColors.obsidian);
+    }
+    return _seen!
+        ? const MainMenu()
+        : OnboardingScreen(onDone: _onOnboardingDone);
   }
 }
 
