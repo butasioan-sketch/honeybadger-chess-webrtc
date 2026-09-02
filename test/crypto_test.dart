@@ -1,23 +1,38 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:honey_badger_chess/crypto_service.dart';
 
+/// Baut ein handschlags-bereites Paar (Alice=Host, Bob=Gast) mit
+/// Testschluesseln und den gegebenen SDP-Platzhaltern.
+Future<(CryptoService, CryptoService)> _connectedPair({
+  String hostSdp = 'v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\n... offer ...',
+  String guestSdp = 'v=0\r\no=- 2 2 IN IP4 0.0.0.0\r\n... answer ...',
+}) async {
+  final alice = CryptoService();
+  final bob = CryptoService();
+  await alice.generateKeyPair();
+  await bob.generateKeyPair();
+  alice.setRole(isHost: true);
+  bob.setRole(isHost: false);
+  final alicePub = await alice.myPublicKeyBytes();
+  final bobPub = await bob.myPublicKeyBytes();
+  await alice.deriveSharedKey(
+    remotePublicKeyBytes: bobPub,
+    myPublicKeyBytes: alicePub,
+    mySdp: hostSdp,
+    remoteSdp: guestSdp,
+  );
+  await bob.deriveSharedKey(
+    remotePublicKeyBytes: alicePub,
+    myPublicKeyBytes: bobPub,
+    mySdp: guestSdp,
+    remoteSdp: hostSdp,
+  );
+  return (alice, bob);
+}
+
 void main() {
   test('Alice und Bob koennen verschluesselt kommunizieren', () async {
-    final alice = CryptoService();
-    final bob = CryptoService();
-
-    await alice.generateKeyPair();
-    await bob.generateKeyPair();
-
-    // Oeffentliche Schluessel tauschen
-    final alicePub = await alice.myPublicKeyBytes();
-    final bobPub = await bob.myPublicKeyBytes();
-
-    // Beide leiten dasselbe Geheimnis ab
-    await alice.deriveSharedKey(bobPub);
-    await bob.deriveSharedKey(alicePub);
-    alice.setRole(isHost: true);
-    bob.setRole(isHost: false);
+    final (alice, bob) = await _connectedPair();
 
     expect(alice.isReady, true);
     expect(bob.isReady, true);
@@ -41,13 +56,30 @@ void main() {
     await alice.generateKeyPair();
     await bob.generateKeyPair();
     await eve.generateKeyPair();
-
-    // Alice spricht mit Bob
-    await alice.deriveSharedKey(await bob.myPublicKeyBytes());
-    // Eve versucht sich reinzudraengen
-    await eve.deriveSharedKey(await alice.myPublicKeyBytes());
     alice.setRole(isHost: true);
     eve.setRole(isHost: false);
+
+    const hostSdp = 'offer-sdp';
+    const guestSdp = 'answer-sdp';
+    final alicePub = await alice.myPublicKeyBytes();
+    final bobPub = await bob.myPublicKeyBytes();
+    final evePub = await eve.myPublicKeyBytes();
+
+    // Alice spricht mit Bob ...
+    await alice.deriveSharedKey(
+      remotePublicKeyBytes: bobPub,
+      myPublicKeyBytes: alicePub,
+      mySdp: hostSdp,
+      remoteSdp: guestSdp,
+    );
+    // ... aber Eve haengt sich mit ihrem EIGENEN Schluesselpaar rein
+    // (nicht Bobs) und leitet dadurch ein anderes ECDH-Geheimnis ab.
+    await eve.deriveSharedKey(
+      remotePublicKeyBytes: alicePub,
+      myPublicKeyBytes: evePub,
+      mySdp: guestSdp,
+      remoteSdp: hostSdp,
+    );
 
     final encrypted = await alice.encrypt('Geheime Nachricht');
 
@@ -55,23 +87,52 @@ void main() {
     await expectLater(eve.decrypt(encrypted), throwsA(anything));
   });
 
-  group('Replay-Schutz (Audit S2)', () {
-    Future<(CryptoService, CryptoService)> connectedPair() async {
+  group('MITM-Fingerprint (Audit S1)', () {
+    test('Host und Gast leiten denselben Fingerprint ab', () async {
+      final (alice, bob) = await _connectedPair();
+
+      expect(alice.fingerprint, isNotNull);
+      expect(alice.fingerprint, bob.fingerprint);
+      expect(RegExp(r'^\d{6}$').hasMatch(alice.fingerprint!), isTrue);
+    });
+
+    test('ein veraendertes Transkript (manipulierte SDP) ergibt einen anderen '
+        'Fingerprint und einen anderen Schluessel', () async {
       final alice = CryptoService();
       final bob = CryptoService();
       await alice.generateKeyPair();
       await bob.generateKeyPair();
-      await alice.deriveSharedKey(await bob.myPublicKeyBytes());
-      await bob.deriveSharedKey(await alice.myPublicKeyBytes());
       alice.setRole(isHost: true);
       bob.setRole(isHost: false);
-      return (alice, bob);
-    }
+      final alicePub = await alice.myPublicKeyBytes();
+      final bobPub = await bob.myPublicKeyBytes();
 
+      // Ein Mittelsmann veraendert die Angebots-SDP unterwegs: Alice hat
+      // die Original-SDP gesendet, Bob hat eine andere empfangen.
+      await alice.deriveSharedKey(
+        remotePublicKeyBytes: bobPub,
+        myPublicKeyBytes: alicePub,
+        mySdp: 'original-angebot',
+        remoteSdp: 'antwort',
+      );
+      await bob.deriveSharedKey(
+        remotePublicKeyBytes: alicePub,
+        myPublicKeyBytes: bobPub,
+        mySdp: 'antwort',
+        remoteSdp: 'manipuliertes-angebot',
+      );
+
+      expect(alice.fingerprint, isNot(bob.fingerprint));
+      final encrypted = await alice.encrypt('Zug');
+      await expectLater(bob.decrypt(encrypted), throwsA(anything));
+    });
+  });
+
+  group('Replay-Schutz (Audit S2)', () {
     test(
       'ein alter, wiederholt gesendeter Geheimtext wird abgelehnt',
       () async {
-        final (alice, bob) = await connectedPair();
+        final (alice, bob) = await _connectedPair();
 
         final first = await alice.encrypt('Zug 1');
         expect(await bob.decrypt(first), 'Zug 1');
@@ -86,7 +147,7 @@ void main() {
     );
 
     test('eine uebersprungene Nachricht wird abgelehnt', () async {
-      final (alice, bob) = await connectedPair();
+      final (alice, bob) = await _connectedPair();
 
       await alice.encrypt('Zug 1'); // wird nie an Bob geliefert
       final second = await alice.encrypt('Zug 2');
@@ -98,7 +159,7 @@ void main() {
     test(
       'eine an den Absender zurueckgespiegelte eigene Nachricht wird abgelehnt',
       () async {
-        final (alice, bob) = await connectedPair();
+        final (alice, bob) = await _connectedPair();
 
         final fromAlice = await alice.encrypt('Hallo Bob');
         // Ein Angreifer spiegelt Alices eigenen Geheimtext an Alice zurueck.

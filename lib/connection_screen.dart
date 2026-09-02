@@ -20,8 +20,15 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   final CryptoService _crypto = CryptoService();
   _Role _role = _Role.none;
   bool _connected = false;
+  bool _fingerprintConfirmed = false;
   bool _busy = false;
   String _status = 'Noch nicht verbunden';
+
+  // Nur als Host gesetzt: eigener Public Key + eigene Angebots-SDP, damit
+  // _hostAcceptAnswer() spaeter das vollstaendige Handschlag-Transkript
+  // fuer die MITM-Fingerprint-Ableitung bauen kann (Audit S1).
+  List<int>? _myPubBytes;
+  String? _mySdp;
 
   String _localCode = '';
   String _lastCipher = '';
@@ -77,6 +84,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
           state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
         setState(() {
           _connected = false;
+          _fingerprintConfirmed = false;
           _status = 'Verbindung getrennt';
         });
       }
@@ -90,6 +98,9 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       try {
         final clear = await _crypto.decrypt(msg.text);
         if (clear == '__START__') {
+          // Audit S1: vor der Sicherheitscode-Bestaetigung ist die
+          // Verbindung nicht als MITM-frei erwiesen - Spielstart ignorieren.
+          if (!_fingerprintConfirmed) return;
           _openBoard(false);
           return;
         }
@@ -128,6 +139,8 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     final offer = await _pc!.createOffer();
     await _pc!.setLocalDescription(offer);
     final full = await _gatherComplete();
+    _myPubBytes = myPub;
+    _mySdp = full.sdp;
     setState(() {
       _localCode = _encodeSignal(full, myPub);
       _busy = false;
@@ -143,9 +156,29 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     });
     try {
       final data = _decodeSignal(_remoteCtrl.text);
-      await _crypto.deriveSharedKey(base64Decode(data['pub']));
+      final guestPub = base64Decode(data['pub'] as String);
+      // Audit S1: pub muss ein echter X25519-Public-Key sein (32 Byte) und
+      // der Code-Typ muss zur erwarteten Rolle passen - sonst kein
+      // manipulierter/vertauschter Code als gueltige Antwort durchgehen.
+      if (guestPub.length != 32) {
+        throw const FormatException(
+          'Oeffentlicher Schluessel hat nicht die erwartete Laenge.',
+        );
+      }
+      if (data['type'] != 'answer') {
+        throw const FormatException(
+          'Das ist keine Antwort auf eine Einladung.',
+        );
+      }
+      final guestSdp = data['sdp'] as String;
+      await _crypto.deriveSharedKey(
+        remotePublicKeyBytes: guestPub,
+        myPublicKeyBytes: _myPubBytes!,
+        mySdp: _mySdp!,
+        remoteSdp: guestSdp,
+      );
       await _pc!.setRemoteDescription(
-        RTCSessionDescription(data['sdp'], data['type']),
+        RTCSessionDescription(guestSdp, data['type']),
       );
       setState(() {
         _busy = false;
@@ -171,16 +204,34 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       await _crypto.generateKeyPair();
       final myPub = await _crypto.myPublicKeyBytes();
       final data = _decodeSignal(_remoteCtrl.text);
-      await _crypto.deriveSharedKey(base64Decode(data['pub']));
+      final hostPub = base64Decode(data['pub'] as String);
+      // Audit S1: siehe _hostAcceptAnswer - dieselbe Pruefung spiegelverkehrt.
+      if (hostPub.length != 32) {
+        throw const FormatException(
+          'Oeffentlicher Schluessel hat nicht die erwartete Laenge.',
+        );
+      }
+      if (data['type'] != 'offer') {
+        throw const FormatException('Das ist keine Einladung.');
+      }
+      final hostSdp = data['sdp'] as String;
       _pc = await createPeerConnection(_config);
       _setupCommon();
       _pc!.onDataChannel = (dc) => _bindChannel(dc);
       await _pc!.setRemoteDescription(
-        RTCSessionDescription(data['sdp'], data['type']),
+        RTCSessionDescription(hostSdp, data['type']),
       );
       final answer = await _pc!.createAnswer();
       await _pc!.setLocalDescription(answer);
       final full = await _gatherComplete();
+      // Erst jetzt ist die eigene Antwort-SDP bekannt - das Handschlag-
+      // Transkript fuer den Fingerprint braucht alle vier Stuecke.
+      await _crypto.deriveSharedKey(
+        remotePublicKeyBytes: hostPub,
+        myPublicKeyBytes: myPub,
+        mySdp: full.sdp!,
+        remoteSdp: hostSdp,
+      );
       setState(() {
         _localCode = _encodeSignal(full, myPub);
         _remoteCtrl.clear();
@@ -197,7 +248,12 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
 
   Future<void> _send() async {
     final text = _msgCtrl.text.trim();
-    if (text.isEmpty || _channel == null || !_crypto.isReady) return;
+    if (text.isEmpty ||
+        _channel == null ||
+        !_crypto.isReady ||
+        !_fingerprintConfirmed) {
+      return;
+    }
     final encrypted = await _crypto.encrypt(text);
     _channel!.send(RTCDataChannelMessage(encrypted));
     if (!mounted) return;
@@ -219,9 +275,30 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   }
 
   Future<void> _startAsHost() async {
+    if (!_fingerprintConfirmed) return;
     final enc = await _crypto.encrypt('__START__');
     _channel!.send(RTCDataChannelMessage(enc));
     _openBoard(true);
+  }
+
+  void _confirmFingerprint() {
+    setState(() => _fingerprintConfirmed = true);
+  }
+
+  Future<void> _rejectFingerprint() async {
+    await _channel?.close();
+    await _pc?.close();
+    if (!mounted) return;
+    setState(() {
+      _channel = null;
+      _pc = null;
+      _connected = false;
+      _fingerprintConfirmed = false;
+      _role = _Role.none;
+      _localCode = '';
+      _status =
+          'Verbindung abgebrochen - Sicherheitscode stimmte nicht ueberein.';
+    });
   }
 
   void _openBoard(bool amWhite) {
@@ -260,7 +337,9 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            if (_connected && _role == _Role.host)
+            if (_connected && _crypto.isReady && !_fingerprintConfirmed)
+              ..._fingerprintUi(),
+            if (_connected && _fingerprintConfirmed && _role == _Role.host)
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
                 child: ElevatedButton.icon(
@@ -276,12 +355,72 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
             if (_role == _Role.none) ..._roleChooser(),
             if (_role == _Role.host) ..._hostUi(),
             if (_role == _Role.guest) ..._guestUi(),
-            if (_connected) ..._chatUi(),
+            if (_connected && _fingerprintConfirmed) ..._chatUi(),
           ],
         ),
       ),
     );
   }
+
+  List<Widget> _fingerprintUi() => [
+    Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.amber.shade900,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          children: [
+            const Text(
+              'Sicherheitscode vergleichen',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Lies diesen Code deinem Freund vor - persoenlich oder ueber '
+              'einen anderen Kanal als den Einladungs-Code. Nur wenn beide '
+              'Seiten denselben Code sehen, ist die Verbindung sicher vor '
+              'einem Mittelsmann.',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _crypto.fingerprint ?? '------',
+              style: const TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 4,
+                fontFamily: 'monospace',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _rejectFingerprint,
+                    child: const Text('Stimmt NICHT ueberein'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _confirmFingerprint,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                    ),
+                    child: const Text('Stimmt ueberein'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  ];
 
   List<Widget> _roleChooser() => [
     const Text(

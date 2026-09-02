@@ -1,9 +1,46 @@
 import 'dart:convert';
 import 'package:cryptography/cryptography.dart';
 
+/// Baut eine eindeutige, kollisionsfreie Kodierung der vier Bytefolgen, die
+/// den Handschlag ausmachen (Laengenpraefix vor jedem Stueck, damit ein
+/// Trennzeichen in einer SDP nicht mit der naechsten Bytefolge verschmelzen
+/// kann).
+List<int> _handshakeTranscript({
+  required List<int> hostPub,
+  required String hostSdp,
+  required List<int> guestPub,
+  required String guestSdp,
+}) {
+  final out = <int>[];
+  void addChunk(List<int> bytes) {
+    final len = bytes.length;
+    out.addAll([
+      (len >> 24) & 0xff,
+      (len >> 16) & 0xff,
+      (len >> 8) & 0xff,
+      len & 0xff,
+    ]);
+    out.addAll(bytes);
+  }
+
+  addChunk(hostPub);
+  addChunk(utf8.encode(hostSdp));
+  addChunk(guestPub);
+  addChunk(utf8.encode(guestSdp));
+  return out;
+}
+
 /// Ende-zu-Ende-Verschluesselung mit bewaehrten Bausteinen:
 ///   X25519            -> Schluesseltausch (gemeinsames Geheimnis ableiten)
 ///   ChaCha20-Poly1305 -> Nachrichten verschluesseln + Echtheit pruefen
+///
+/// Audit S1 (MITM-Schutz): der Sitzungsschluessel ist nicht das rohe
+/// X25519-Geheimnis, sondern per HKDF an den kompletten Handschlag-
+/// Transkript gebunden (beide Public Keys + beide SDPs). Veraendert ein
+/// Mittelsmann auch nur ein Byte der ausgetauschten Signaling-Codes,
+/// leiten Host und Gast unterschiedliche Schluessel (und Fingerprints) ab -
+/// die UI-Schicht zeigt den Fingerprint vor dem ersten Chat/Zug an, damit
+/// die Nutzer das ausserhalb des Signaling-Kanals abgleichen koennen.
 ///
 /// Audit S2 (Replay-Schutz): jede Nachricht bindet eine pro Senderichtung
 /// monoton steigende Sequenznummer plus die Richtung (Host/Gast) als
@@ -27,6 +64,7 @@ class CryptoService {
   bool? _isHost;
   int _sendSeq = 0;
   int _expectedRecvSeq = 0;
+  String? _fingerprint;
 
   Future<void> generateKeyPair() async {
     _myKeyPair = await _kex.newKeyPair();
@@ -37,22 +75,67 @@ class CryptoService {
     return pub.bytes;
   }
 
-  Future<void> deriveSharedKey(List<int> remotePublicKeyBytes) async {
+  /// Leitet den Sitzungsschluessel ab. [remotePublicKeyBytes] und
+  /// [remoteSdp] gehoeren der Gegenseite, [myPublicKeyBytes]/[mySdp] mir
+  /// selbst - [setRole] muss vorher aufgerufen worden sein, damit die
+  /// beiden Seiten in der richtigen Reihenfolge (Host zuerst) ins
+  /// Transkript einsortiert werden koennen; sonst leiten Host und Gast
+  /// unterschiedliche Schluessel ab, obwohl niemand manipuliert hat.
+  Future<void> deriveSharedKey({
+    required List<int> remotePublicKeyBytes,
+    required List<int> myPublicKeyBytes,
+    required String mySdp,
+    required String remoteSdp,
+  }) async {
+    final isHost = _requireHostRole;
     final remotePub = SimplePublicKey(
       remotePublicKeyBytes,
       type: KeyPairType.x25519,
     );
-    _sharedKey = await _kex.sharedSecretKey(
+    final rawShared = await _kex.sharedSecretKey(
       keyPair: _myKeyPair!,
       remotePublicKey: remotePub,
     );
+    final rawSharedBytes = await rawShared.extractBytes();
+
+    final transcript = _handshakeTranscript(
+      hostPub: isHost ? myPublicKeyBytes : remotePublicKeyBytes,
+      hostSdp: isHost ? mySdp : remoteSdp,
+      guestPub: isHost ? remotePublicKeyBytes : myPublicKeyBytes,
+      guestSdp: isHost ? remoteSdp : mySdp,
+    );
+
+    final hkdf = Hkdf(hmac: Hmac.sha256(), outputLength: 32);
+    _sharedKey = await hkdf.deriveKey(
+      secretKey: SecretKey(rawSharedBytes),
+      info: utf8.encode('$_domain|session') + transcript,
+    );
+    final sasKey = await hkdf.deriveKey(
+      secretKey: SecretKey(rawSharedBytes),
+      info: utf8.encode('$_domain|sas') + transcript,
+    );
+    _fingerprint = _formatFingerprint(await sasKey.extractBytes());
   }
 
-  /// Legt fest, ob diese Seite Host oder Gast ist - muss vor der ersten
-  /// [encrypt]/[decrypt]-Nutzung gesetzt sein, sonst werfen beide.
+  /// Legt fest, ob diese Seite Host oder Gast ist - muss vor
+  /// [deriveSharedKey] und der ersten [encrypt]/[decrypt]-Nutzung gesetzt
+  /// sein, sonst werfen alle drei.
   void setRole({required bool isHost}) => _isHost = isHost;
 
   bool get isReady => _sharedKey != null;
+
+  /// 6-stellige Kurzpruefsumme (Short Authentication String) ueber den
+  /// Handschlag-Transkript. Erst nach [deriveSharedKey] gesetzt. Beide
+  /// Seiten muessen denselben Code sehen, ausserhalb des Signaling-Kanals
+  /// verglichen (z.B. am Telefon vorgelesen) - stimmt er nicht ueberein,
+  /// hat jemand den Einladungs-/Antwort-Code unterwegs manipuliert.
+  String? get fingerprint => _fingerprint;
+
+  String _formatFingerprint(List<int> bytes) {
+    final n = (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
+    final code = n.toUnsigned(32) % 1000000;
+    return code.toString().padLeft(6, '0');
+  }
 
   List<int> _aad(int seq, {required bool fromHost}) =>
       utf8.encode('$_domain|${fromHost ? 'H' : 'G'}|$seq');
