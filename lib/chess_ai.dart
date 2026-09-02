@@ -47,8 +47,9 @@ class ChessAI {
     if (moves.isEmpty) {
       return _relativeEval(game);
     }
-    moves.sort((a, b) =>
-        (b.captured != null ? 1 : 0) - (a.captured != null ? 1 : 0));
+    moves.sort(
+      (a, b) => (b.captured != null ? 1 : 0) - (a.captured != null ? 1 : 0),
+    );
     int best = -1000000;
     for (final m in moves) {
       game.make_move(m);
@@ -65,8 +66,9 @@ class ChessAI {
     final sim = game.copy();
     final moves = sim.generate_moves();
     if (moves.isEmpty) return null;
-    moves.sort((a, b) =>
-        (b.captured != null ? 1 : 0) - (a.captured != null ? 1 : 0));
+    moves.sort(
+      (a, b) => (b.captured != null ? 1 : 0) - (a.captured != null ? 1 : 0),
+    );
     Move? best;
     int bestScore = -1000000;
     int alpha = -1000000;

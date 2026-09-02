@@ -21,8 +21,10 @@ class CryptoService {
   }
 
   Future<void> deriveSharedKey(List<int> remotePublicKeyBytes) async {
-    final remotePub =
-        SimplePublicKey(remotePublicKeyBytes, type: KeyPairType.x25519);
+    final remotePub = SimplePublicKey(
+      remotePublicKeyBytes,
+      type: KeyPairType.x25519,
+    );
     _sharedKey = await _kex.sharedSecretKey(
       keyPair: _myKeyPair!,
       remotePublicKey: remotePub,
