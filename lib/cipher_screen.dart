@@ -41,6 +41,56 @@ List<String> parseMoveList(String input) {
 class CipherScreen extends StatelessWidget {
   const CipherScreen({super.key});
 
+  void _showHelpSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: HbcColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Die Züge sind die Nachricht',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Das ist kein Messenger. Es gibt keine Server, keine '
+              'Zustellung, keine Kontakte - nur eine Zugfolge, die du '
+              'selbst kopierst und irgendwie an die andere Person bringst '
+              '(Chat, E-Mail, Zettel, was auch immer ihr wollt). Wer die '
+              'Zugfolge sieht, ohne das Passwort zu kennen, sieht nur eine '
+              'ganz normale Schachpartie.',
+              style: TextStyle(color: HbcColors.inkMuted),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Kurze Nachrichten (grob bis ~200 Zeichen) sind am '
+              'zuverlässigsten - der Zufallsweg durchs Schachbrett kann bei '
+              'längeren Nachrichten vorzeitig in einem Matt/Patt enden und '
+              'wird dann automatisch neu versucht.',
+              style: TextStyle(color: HbcColors.inkMuted),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Passwort weg = Nachricht unwiederbringlich weg. Es gibt '
+              'keine Wiederherstellung, keinen "Passwort vergessen"-Weg.',
+              style: TextStyle(
+                color: HbcColors.danger,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -48,6 +98,13 @@ class CipherScreen extends StatelessWidget {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Visueller Cipher'),
+          actions: [
+            IconButton(
+              tooltip: 'Was ist das?',
+              icon: const Icon(Icons.help_outline),
+              onPressed: () => _showHelpSheet(context),
+            ),
+          ],
           bottom: const TabBar(
             tabs: [
               Tab(text: 'Verschlüsseln'),
@@ -136,15 +193,20 @@ class _EncoderTabState extends State<_EncoderTab> {
           TextField(
             controller: _textCtrl,
             maxLines: 4,
+            onChanged: (_) => setState(() {}),
             decoration: const InputDecoration(
               labelText: 'Nachricht',
               border: OutlineInputBorder(),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 4),
+          _LengthHint(length: _textCtrl.text.length),
+          const SizedBox(height: 8),
           TextField(
             controller: _passCtrl,
             obscureText: _obscure,
+            autocorrect: false,
+            enableSuggestions: false,
             decoration: InputDecoration(
               labelText: 'Passwort',
               border: const OutlineInputBorder(),
@@ -210,6 +272,32 @@ class _EncoderTabState extends State<_EncoderTab> {
         ],
       ),
     );
+  }
+}
+
+/// Live-Einschaetzung der Nachrichtenlaenge: der Zufallsweg durchs
+/// Schachbrett kann bei laengeren Nachrichten vorzeitig in einem Matt/Patt
+/// enden (automatischer Retry, aber irgendwann unwahrscheinlich genug, dass
+/// man es lieber weiss statt zu raten).
+class _LengthHint extends StatelessWidget {
+  final int length;
+  const _LengthHint({required this.length});
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color;
+    final String msg;
+    if (length <= 200) {
+      color = HbcColors.success;
+      msg = '$length Zeichen - im zuverlässigen Bereich.';
+    } else if (length <= 300) {
+      color = HbcColors.gold;
+      msg = '$length Zeichen - kann klappen, Retries werden wahrscheinlicher.';
+    } else {
+      color = HbcColors.danger;
+      msg = '$length Zeichen - deutlich über dem empfohlenen Bereich.';
+    }
+    return Text(msg, style: TextStyle(color: color, fontSize: 12));
   }
 }
 
@@ -290,6 +378,8 @@ class _DecoderTabState extends State<_DecoderTab> {
           TextField(
             controller: _passCtrl,
             obscureText: _obscure,
+            autocorrect: false,
+            enableSuggestions: false,
             decoration: InputDecoration(
               labelText: 'Passwort',
               border: const OutlineInputBorder(),
