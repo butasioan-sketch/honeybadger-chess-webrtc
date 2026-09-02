@@ -3,11 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:chess/chess.dart' as ch;
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'board_mode_prefs.dart';
-import 'chess3d/chess_board_3d.dart';
 import 'crypto_service.dart';
 import 'move_codec.dart';
 import 'ui/hbc_theme.dart';
-import 'widgets/chess_board_view.dart';
+import 'widgets/board_surface.dart';
 
 /// Schach ueber die bereits verbundene, verschluesselte WebRTC-Leitung.
 /// Der Host spielt Weiss, der Gast Schwarz. Jeder Zug wird verschluesselt
@@ -286,25 +285,16 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
                 aspectRatio: 1,
                 child: Padding(
                   padding: const EdgeInsets.all(8),
-                  child: _use3D
-                      ? ChessBoard3D(
-                          game: _game,
-                          selected: _selected,
-                          targets: _targets,
-                          lastFrom: _lastFrom,
-                          lastTo: _lastTo,
-                          flipped: !widget.amWhite,
-                          onSquareTap: _onSquareTap,
-                        )
-                      : ChessBoardView(
-                          game: _game,
-                          selected: _selected,
-                          targets: _targets,
-                          lastFrom: _lastFrom,
-                          lastTo: _lastTo,
-                          flipped: !widget.amWhite,
-                          onSquareTap: _onSquareTap,
-                        ),
+                  child: BoardSurface(
+                    game: _game,
+                    use3D: _use3D,
+                    selected: _selected,
+                    targets: _targets,
+                    lastFrom: _lastFrom,
+                    lastTo: _lastTo,
+                    flipped: !widget.amWhite,
+                    onSquareTap: _onSquareTap,
+                  ),
                 ),
               ),
             ),

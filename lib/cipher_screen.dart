@@ -5,10 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'board_mode_prefs.dart';
-import 'chess3d/chess_board_3d.dart';
 import 'ui/hbc_theme.dart';
 import 'visual_chess_cipher.dart';
-import 'widgets/chess_board_view.dart';
+import 'widgets/board_surface.dart';
 
 final RegExp _uciMovePattern = RegExp(r'^[a-h][1-8][a-h][1-8][qrbn]?$');
 
@@ -468,13 +467,12 @@ class _CipherPlaybackBoardState extends State<_CipherPlaybackBoard> {
       children: [
         AspectRatio(
           aspectRatio: 1,
-          child: _use3D
-              ? ChessBoard3D(game: _game, lastFrom: _lastFrom, lastTo: _lastTo)
-              : ChessBoardView(
-                  game: _game,
-                  lastFrom: _lastFrom,
-                  lastTo: _lastTo,
-                ),
+          child: BoardSurface(
+            game: _game,
+            use3D: _use3D,
+            lastFrom: _lastFrom,
+            lastTo: _lastTo,
+          ),
         ),
         const SizedBox(height: 8),
         Text(

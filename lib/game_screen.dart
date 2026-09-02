@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:chess/chess.dart' as ch;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'board_mode_prefs.dart';
-import 'chess3d/chess_board_3d.dart';
 import 'chess_ai.dart';
 import 'ui/hbc_theme.dart';
-import 'widgets/chess_board_view.dart';
+import 'widgets/board_surface.dart';
 
 const _aiDepthPrefsKey = 'ai_depth';
 
@@ -280,23 +279,15 @@ class _GameScreenState extends State<GameScreen> {
                 aspectRatio: 1,
                 child: Padding(
                   padding: const EdgeInsets.all(8),
-                  child: _use3D
-                      ? ChessBoard3D(
-                          game: _game,
-                          selected: _selected,
-                          targets: _targets,
-                          lastFrom: _lastFrom,
-                          lastTo: _lastTo,
-                          onSquareTap: _onSquareTap,
-                        )
-                      : ChessBoardView(
-                          game: _game,
-                          selected: _selected,
-                          targets: _targets,
-                          lastFrom: _lastFrom,
-                          lastTo: _lastTo,
-                          onSquareTap: _onSquareTap,
-                        ),
+                  child: BoardSurface(
+                    game: _game,
+                    use3D: _use3D,
+                    selected: _selected,
+                    targets: _targets,
+                    lastFrom: _lastFrom,
+                    lastTo: _lastTo,
+                    onSquareTap: _onSquareTap,
+                  ),
                 ),
               ),
             ),

@@ -70,11 +70,31 @@ class _ChessBoard3DState extends State<ChessBoard3D> {
   double _distance = _defaultDistance;
   double _gestureStartDistance = _defaultDistance;
 
+  // Audit-Fund (3D-Perf): build() rief bisher bedingungslos
+  // _syncSceneObjects() auf, was bei JEDEM Orbit-Drag/Pinch-Frame (ueber
+  // setState in _handleScaleUpdate) alle 64 Felder + bis zu 32 Figuren neu
+  // erzeugt hat - nur um die Kamera zu bewegen. Jetzt wird der Inhalt nur
+  // noch neu aufgebaut, wenn sich die Stellung/Auswahl/Hervorhebung
+  // tatsaechlich geaendert hat (Signatur-Vergleich in didUpdateWidget),
+  // waehrend Kamera-Aenderungen ausschliesslich scene.update() ausloesen -
+  // das triggert direkt den internen Repaint von flutter_cube's Cube-
+  // Widget, ohne dass unser eigenes build() (und damit _syncSceneObjects)
+  // je laufen muss.
+  String? _lastSyncedSignature;
+
+  String _computeSignature() {
+    final sortedTargets = widget.targets.toList()..sort();
+    return '${widget.game.generate_fen()}|${widget.selected}|'
+        '${sortedTargets.join(",")}|${widget.lastFrom}|${widget.lastTo}';
+  }
+
   void _onSceneCreated(cube.Scene scene) {
     _scene = scene;
     scene.light.position.setValues(2.5, 9.0, -4.0);
     scene.light.setColor(Colors.white, 0.5, 0.85, 0.35);
     _resetCamera();
+    _syncSceneObjects();
+    _lastSyncedSignature = _computeSignature();
     if (mounted) setState(() {});
   }
 
@@ -95,13 +115,21 @@ class _ChessBoard3DState extends State<ChessBoard3D> {
     scene.camera.target.setValues(0, 0, 0);
     scene.camera.up.setValues(0, 1, 0);
     scene.camera.fov = 42;
+    // Loest den Repaint direkt ueber flutter_cube's eigenen onUpdate-Hook
+    // aus (siehe Klassendoc) - kein setState auf diesem Widget noetig.
+    scene.update();
   }
 
   @override
   void didUpdateWidget(covariant ChessBoard3D oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.flipped != widget.flipped) {
-      setState(_resetCamera);
+      _resetCamera();
+    }
+    final signature = _computeSignature();
+    if (_scene != null && signature != _lastSyncedSignature) {
+      _syncSceneObjects();
+      _lastSyncedSignature = signature;
     }
   }
 
@@ -240,25 +268,29 @@ class _ChessBoard3DState extends State<ChessBoard3D> {
   }
 
   void _handleScaleUpdate(ScaleUpdateDetails details) {
-    setState(() {
-      _azimuth -= details.focalPointDelta.dx * 0.012;
-      _elevation = (_elevation - details.focalPointDelta.dy * 0.012).clamp(
-        _minElevation,
-        _maxElevation,
+    // Bewusst KEIN setState hier - das wuerde build() (und damit
+    // _syncSceneObjects) auf jedem Drag-Frame erneut laufen lassen.
+    // _applyCamera() loest den Repaint direkt ueber scene.update() aus.
+    _azimuth -= details.focalPointDelta.dx * 0.012;
+    _elevation = (_elevation - details.focalPointDelta.dy * 0.012).clamp(
+      _minElevation,
+      _maxElevation,
+    );
+    if (details.scale != 1.0) {
+      _distance = (_gestureStartDistance / details.scale).clamp(
+        _minDistance,
+        _maxDistance,
       );
-      if (details.scale != 1.0) {
-        _distance = (_gestureStartDistance / details.scale).clamp(
-          _minDistance,
-          _maxDistance,
-        );
-      }
-      _applyCamera();
-    });
+    }
+    _applyCamera();
   }
 
   @override
   Widget build(BuildContext context) {
-    _syncSceneObjects();
+    // Absichtlich KEIN _syncSceneObjects() hier - der Szeneninhalt wird
+    // ausschliesslich in _onSceneCreated (einmalig) und didUpdateWidget
+    // (nur bei tatsaechlicher Stellungsaenderung) aktualisiert. build()
+    // liefert nur noch das statische Geruest.
     return Container(
       color: _boardBackground,
       child: Stack(
@@ -277,7 +309,7 @@ class _ChessBoard3DState extends State<ChessBoard3D> {
           Positioned(
             right: 8,
             bottom: 8,
-            child: _ResetCameraButton(onPressed: () => setState(_resetCamera)),
+            child: _ResetCameraButton(onPressed: _resetCamera),
           ),
         ],
       ),
