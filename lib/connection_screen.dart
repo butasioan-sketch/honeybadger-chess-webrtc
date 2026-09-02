@@ -118,6 +118,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       _role = _Role.host;
       _status = 'Erstelle Einladung ...';
     });
+    _crypto.setRole(isHost: true);
     await _crypto.generateKeyPair();
     final myPub = await _crypto.myPublicKeyBytes();
     _pc = await createPeerConnection(_config);
@@ -165,6 +166,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       _role = _Role.guest;
       _status = 'Erstelle Antwort ...';
     });
+    _crypto.setRole(isHost: false);
     try {
       await _crypto.generateKeyPair();
       final myPub = await _crypto.myPublicKeyBytes();
