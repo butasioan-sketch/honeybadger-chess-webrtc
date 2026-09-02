@@ -49,12 +49,15 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
       try {
         final clear = await widget.crypto.decrypt(msg.text);
         if (isResignPayload(clear)) {
+          // Eine Aufgabe nach Spielende ist kein gueltiges Ereignis mehr
+          // (z.B. eine verspaetete/wiederholte Nachricht) - ignorieren.
+          if (_gameEnded || _game.game_over) return;
           _endGame('Der Gegner hat aufgegeben - du gewinnst!');
           return;
         }
         final move = decodeMovePayload(clear);
         if (move != null) {
-          _applyRemoteMove(move.from, move.to);
+          _applyRemoteMove(move.from, move.to, move.ply);
         }
       } catch (_) {
         // Nachricht ignorieren, wenn sie nicht lesbar ist.
@@ -183,13 +186,27 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
       _targets = {};
     });
     // Zug verschluesselt an den Gegner schicken.
-    final payload = encodeMovePayload(from, to);
+    final payload = encodeMovePayload(from, to, _game.history.length);
     final encrypted = await widget.crypto.encrypt(payload);
     widget.channel.send(RTCDataChannelMessage(encrypted));
     _checkEnd();
   }
 
-  void _applyRemoteMove(String from, String to) {
+  void _applyRemoteMove(String from, String to, int ply) {
+    if (!canAcceptRemoteMove(
+      game: _game,
+      amWhite: widget.amWhite,
+      gameEnded: _gameEnded,
+      ply: ply,
+    )) {
+      return;
+    }
+    // Zusaetzlich zur Zugrecht-Pruefung oben: die gezogene Figur muss dem
+    // Gegner gehoeren (Verteidigung in der Tiefe, falls die Turn-Logik
+    // irgendwo anders einmal falsch verdrahtet wird).
+    final opponentColor = widget.amWhite ? ch.Chess.BLACK : ch.Chess.WHITE;
+    final piece = _game.get(from);
+    if (piece == null || piece.color != opponentColor) return;
     final chosen = resolveMove(_game, from, to);
     if (chosen == null) return;
     _game.move(chosen);
