@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'board_mode_prefs.dart';
 import 'chess3d/chess_board_3d.dart';
 import 'chess_ai.dart';
+import 'ui/hbc_theme.dart';
 import 'widgets/chess_board_view.dart';
 
 const _aiDepthPrefsKey = 'ai_depth';
@@ -259,7 +260,7 @@ class _GameScreenState extends State<GameScreen> {
         children: [
           Container(
             width: double.infinity,
-            color: Colors.black,
+            color: HbcColors.surface,
             padding: const EdgeInsets.symmetric(vertical: 14),
             child: Text(
               _status(),
@@ -268,8 +269,8 @@ class _GameScreenState extends State<GameScreen> {
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
                 color: (_game.in_check && !_game.game_over)
-                    ? Colors.redAccent
-                    : Colors.white,
+                    ? HbcColors.danger
+                    : HbcColors.ink,
               ),
             ),
           ),
@@ -306,7 +307,7 @@ class _GameScreenState extends State<GameScreen> {
               widget.vsComputer
                   ? 'Du spielst Weiss (unten)  -  Stufe: ${_difficultyLabel()}'
                   : 'Lokales 2-Spieler-Spiel',
-              style: const TextStyle(color: Colors.white38),
+              style: const TextStyle(color: HbcColors.inkMuted),
             ),
           ),
         ],

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'crypto_service.dart';
 import 'online_game_screen.dart';
+import 'ui/hbc_theme.dart';
 
 class ConnectionScreen extends StatefulWidget {
   const ConnectionScreen({super.key});
@@ -327,7 +328,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: _connected ? Colors.green.shade800 : Colors.black,
+                color: _connected ? HbcColors.success : HbcColors.surface,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -347,7 +348,6 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                   icon: const Icon(Icons.sports_esports),
                   label: const Text('SCHACH STARTEN'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
                 ),
@@ -368,7 +368,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.amber.shade900,
+          color: HbcColors.goldDim,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
@@ -383,7 +383,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
               'einen anderen Kanal als den Einladungs-Code. Nur wenn beide '
               'Seiten denselben Code sehen, ist die Verbindung sicher vor '
               'einem Mittelsmann.',
-              style: TextStyle(color: Colors.white70, fontSize: 12),
+              style: TextStyle(color: HbcColors.inkMuted, fontSize: 12),
             ),
             const SizedBox(height: 12),
             Text(
@@ -409,7 +409,8 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                   child: ElevatedButton(
                     onPressed: _confirmFingerprint,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
+                      backgroundColor: HbcColors.success,
+                      foregroundColor: HbcColors.obsidian,
                     ),
                     child: const Text('Stimmt ueberein'),
                   ),
@@ -426,22 +427,20 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     const Text(
       'Einer lädt ein, der andere tritt bei. Die Schluessel reisen im Code '
       'mit - ab dem Handschlag ist alles Ende-zu-Ende verschluesselt.',
-      style: TextStyle(color: Colors.white70),
+      style: TextStyle(color: HbcColors.inkMuted),
     ),
     const SizedBox(height: 20),
     ElevatedButton(
       onPressed: _busy ? null : _startHost,
       style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.green,
         padding: const EdgeInsets.symmetric(vertical: 14),
       ),
       child: const Text('Einladen (Code erstellen)'),
     ),
     const SizedBox(height: 12),
-    ElevatedButton(
+    OutlinedButton(
       onPressed: _busy ? null : () => setState(() => _role = _Role.guest),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.blue,
+      style: OutlinedButton.styleFrom(
         padding: const EdgeInsets.symmetric(vertical: 14),
       ),
       child: const Text('Beitreten (Code eingeben)'),
@@ -454,7 +453,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.white10,
+        color: HbcColors.surface,
         borderRadius: BorderRadius.circular(6),
       ),
       child: SelectableText(
@@ -479,7 +478,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       'Google-STUN-Server (stun.l.google.com) fuer den Verbindungsaufbau - '
       'nicht nur den Schluessel. Teile ihn nur mit der Person, mit der du '
       'wirklich spielen willst.',
-      style: TextStyle(fontSize: 11, color: Colors.white54),
+      style: TextStyle(fontSize: 11, color: HbcColors.inkMuted),
     ),
   ];
 
@@ -551,7 +550,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       height: 150,
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.white10,
+        color: HbcColors.surface,
         borderRadius: BorderRadius.circular(6),
       ),
       child: SingleChildScrollView(
@@ -581,24 +580,20 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       const SizedBox(height: 12),
       const Text(
         'Das ging WIRKLICH ueber die Leitung (Geheimtext):',
-        style: TextStyle(fontSize: 12, color: Colors.white54),
+        style: TextStyle(fontSize: 12, color: HbcColors.inkMuted),
       ),
       const SizedBox(height: 4),
       Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: Colors.black,
+          color: HbcColors.surface,
           borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
           _lastCipher.length > 80
               ? '${_lastCipher.substring(0, 80)} ...'
               : _lastCipher,
-          style: const TextStyle(
-            fontSize: 10,
-            color: Colors.greenAccent,
-            fontFamily: 'monospace',
-          ),
+          style: hbcMono.copyWith(fontSize: 10, color: HbcColors.gold),
         ),
       ),
     ],

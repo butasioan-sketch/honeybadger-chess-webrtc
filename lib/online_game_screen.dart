@@ -6,6 +6,7 @@ import 'board_mode_prefs.dart';
 import 'chess3d/chess_board_3d.dart';
 import 'crypto_service.dart';
 import 'move_codec.dart';
+import 'ui/hbc_theme.dart';
 import 'widgets/chess_board_view.dart';
 
 /// Schach ueber die bereits verbundene, verschluesselte WebRTC-Leitung.
@@ -265,7 +266,7 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
         children: [
           Container(
             width: double.infinity,
-            color: Colors.black,
+            color: HbcColors.surface,
             padding: const EdgeInsets.symmetric(vertical: 14),
             child: Text(
               _status(),
@@ -274,8 +275,8 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
                 color: (_game.in_check && !_game.game_over)
-                    ? Colors.redAccent
-                    : Colors.white,
+                    ? HbcColors.danger
+                    : HbcColors.ink,
               ),
             ),
           ),
@@ -312,7 +313,7 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
             padding: const EdgeInsets.all(12),
             child: Text(
               'Verschluesselte Partie - jeder Zug geht E2E ueber die Leitung.',
-              style: const TextStyle(color: Colors.white38, fontSize: 12),
+              style: const TextStyle(color: HbcColors.inkMuted, fontSize: 12),
             ),
           ),
         ],

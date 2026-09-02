@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import 'board_mode_prefs.dart';
 import 'chess3d/chess_board_3d.dart';
+import 'ui/hbc_theme.dart';
 import 'visual_chess_cipher.dart';
 import 'widgets/chess_board_view.dart';
 
@@ -130,7 +131,7 @@ class _EncoderTabState extends State<_EncoderTab> {
             '~200 Zeichen) funktionieren am zuverlässigsten: der Zufallsweg '
             'durchs Schachbrett kann bei längeren Nachrichten vorzeitig in '
             'einem Matt/Patt enden.',
-            style: TextStyle(color: Colors.white70),
+            style: TextStyle(color: HbcColors.inkMuted),
           ),
           const SizedBox(height: 16),
           TextField(
@@ -169,7 +170,7 @@ class _EncoderTabState extends State<_EncoderTab> {
               margin: const EdgeInsets.only(top: 16),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.shade900,
+                color: HbcColors.danger,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(_error!),
@@ -184,7 +185,7 @@ class _EncoderTabState extends State<_EncoderTab> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.white10,
+                color: HbcColors.surface,
                 borderRadius: BorderRadius.circular(6),
               ),
               child: SelectableText(
@@ -275,7 +276,7 @@ class _DecoderTabState extends State<_DecoderTab> {
           const Text(
             'Zugfolge (aus dem Verschlüsseln-Tab) und Passwort einfügen, '
             'um die Nachricht zurückzubekommen.',
-            style: TextStyle(color: Colors.white70),
+            style: TextStyle(color: HbcColors.inkMuted),
           ),
           const SizedBox(height: 16),
           TextField(
@@ -314,7 +315,7 @@ class _DecoderTabState extends State<_DecoderTab> {
               margin: const EdgeInsets.only(top: 16),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.shade900,
+                color: HbcColors.danger,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(_error!),
@@ -329,7 +330,7 @@ class _DecoderTabState extends State<_DecoderTab> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.white10,
+                color: HbcColors.surface,
                 borderRadius: BorderRadius.circular(6),
               ),
               child: SelectableText(_plainText!),
@@ -478,7 +479,7 @@ class _CipherPlaybackBoardState extends State<_CipherPlaybackBoard> {
         const SizedBox(height: 8),
         Text(
           'Zug $_ply / ${widget.moves.length}',
-          style: const TextStyle(color: Colors.white54),
+          style: const TextStyle(color: HbcColors.inkMuted),
         ),
         const SizedBox(height: 4),
         Row(
