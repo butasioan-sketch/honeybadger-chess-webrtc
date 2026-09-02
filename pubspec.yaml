@@ -1,5 +1,5 @@
 name: honey_badger_chess
-description: "A new Flutter project."
+description: "Schach mit lokalem Spiel, verschluesseltem WebRTC-P2P-Mehrspieler und optionalem visuellem Chess-Cipher - wahlweise in 2D oder 3D."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
