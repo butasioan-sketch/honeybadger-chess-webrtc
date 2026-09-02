@@ -67,3 +67,57 @@ adb install -r build/app/outputs/flutter-apk/app-release.apk
 
 Auf einem echten Gerät starten und mindestens den lokalen Modus (gegen
 Computer/Freund) einmal durchspielen, bevor die APK veröffentlicht wird.
+Online-Modus/WebRTC nur mit einem zweiten echten Gerät sinnvoll testbar
+(`docs/RELEASE.md` ersetzt das nicht - siehe Checkliste unten).
+
+## 5. GitHub Release veröffentlichen
+
+GitHub Release ist der erste öffentliche Kanal - noch **kein** Play-Store-
+Listing, keine Store-Zahlung, keine Werbung dafür. Solange Legal-Texte
+(`docs/legal/`) noch Platzhalter sind und `android/key.properties` noch
+nicht mit dem echten Upload-Keystore existiert, ist die App **nicht**
+store-fertig - ein GitHub Release ändert daran nichts, es macht nur eine
+sideloadbare APK für Tester verfügbar.
+
+### Checkliste vor jedem Release
+
+- [ ] `flutter analyze` + `flutter test` grün
+- [ ] Release-APK mit dem echten (nicht Debug-)Keystore gebaut, siehe
+      Schritte 1-3
+- [ ] Sideload-Test auf mindestens einem echten Gerät (Schritt 4)
+- [ ] Bei Änderungen am Online-Modus: Zwei-Geräte-Test (macht Jonny,
+      siehe `docs/legal/`-Hinweis oben zu WebRTC)
+- [ ] Release-Notes geschrieben (Vorlage: `docs/RELEASE_NOTES_TEMPLATE.md`)
+- [ ] `pubspec.yaml`-Version passt zum geplanten Tag
+
+### Version & Tag
+
+`pubspec.yaml` trägt `version: X.Y.Z+B` (Name+Build-Nummer). Der Git-Tag
+folgt demselben `X.Y.Z` ohne Build-Nummer, mit `v`-Präfix:
+
+```bash
+git tag -a v1.0.0 -m "v1.0.0"
+git push origin v1.0.0
+```
+
+Solange die App weder store-fertig noch von zwei echten Geräten
+durchgetestet ist, ist ein `alpha-`/`beta-`-Präfix ehrlicher als eine
+nackte `1.0.0` - das ist eine Produktentscheidung, die Jonny trifft, kein
+technisches Muss.
+
+### Release erstellen (GitHub CLI)
+
+```bash
+gh release create v1.0.0 \
+  build/app/outputs/flutter-apk/app-release.apk \
+  --title "v1.0.0" \
+  --notes-file docs/RELEASE_NOTES_TEMPLATE.md \
+  --prerelease
+```
+
+`--prerelease` bleibt gesetzt, bis die App wirklich store-fertig ist
+(echtes Legal, zwei-Geräte-QA bestanden) - GitHub markiert den Release
+dann sichtbar als "Pre-release", niemand stolpert versehentlich über eine
+frühe Version als "das fertige Produkt". `--notes-file` braucht vorher
+ausgefüllte Release-Notes (Vorlage kopieren, nicht die Vorlage selbst
+hochladen).
