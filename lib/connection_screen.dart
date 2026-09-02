@@ -469,6 +469,18 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       icon: const Icon(Icons.copy, size: 18),
       label: const Text('Code kopieren'),
     ),
+    const SizedBox(height: 6),
+    // Audit S4: ehrlich sagen, was tatsaechlich im Code steckt - nicht nur
+    // der Schluessel. Der Verbindungsaufbau selbst (STUN, ICE) ist noch
+    // nicht verschluesselt.
+    const Text(
+      'Dieser Code enthaelt auch Netzwerk-Informationen (u.a. lokale '
+      'IP-Adressen deines Geraets) und nutzt einen oeffentlichen '
+      'Google-STUN-Server (stun.l.google.com) fuer den Verbindungsaufbau - '
+      'nicht nur den Schluessel. Teile ihn nur mit der Person, mit der du '
+      'wirklich spielen willst.',
+      style: TextStyle(fontSize: 11, color: Colors.white54),
+    ),
   ];
 
   Widget _pasteField(String hint) => TextField(
