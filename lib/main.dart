@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'game_screen.dart';
 import 'connection_screen.dart';
 import 'cipher_screen.dart';
+import 'support_url.dart';
 import 'ui/hbc_theme.dart';
 
 void main() => runApp(const HoneyBadgerChessApp());
@@ -39,6 +41,60 @@ class MainMenu extends StatelessWidget {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const CipherScreen()));
+  }
+
+  void _showSupportSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: HbcColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Honey Badger Chess unterstützen',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Die App hat keine Serverkosten (alles laeuft direkt '
+              'zwischen den Geraeten) und ist kostenlos. Wer trotzdem '
+              'etwas dalassen will:',
+              style: TextStyle(color: HbcColors.inkMuted),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: HbcColors.obsidian,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: HbcColors.hairline),
+              ),
+              child: SelectableText(supportUrl, style: hbcMono),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () {
+                Clipboard.setData(const ClipboardData(text: supportUrl));
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(
+                    content: Text('Link kopiert'),
+                    duration: Duration(seconds: 1),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.copy, size: 18),
+              label: const Text('Link kopieren'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -85,6 +141,13 @@ class MainMenu extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 24),
+            TextButton.icon(
+              onPressed: () => _showSupportSheet(context),
+              icon: const Icon(Icons.favorite_border, size: 16),
+              label: const Text('Unterstützen'),
+              style: TextButton.styleFrom(foregroundColor: HbcColors.gold),
             ),
           ],
         ),
