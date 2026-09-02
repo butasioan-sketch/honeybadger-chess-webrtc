@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'game_screen.dart';
 import 'connection_screen.dart';
 import 'cipher_screen.dart';
+import 'legal_screen.dart';
 import 'support_url.dart';
 import 'ui/hbc_theme.dart';
 
@@ -143,11 +144,27 @@ class MainMenu extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            TextButton.icon(
-              onPressed: () => _showSupportSheet(context),
-              icon: const Icon(Icons.favorite_border, size: 16),
-              label: const Text('Unterstützen'),
-              style: TextButton.styleFrom(foregroundColor: HbcColors.gold),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 4,
+              children: [
+                TextButton.icon(
+                  onPressed: () => _showSupportSheet(context),
+                  icon: const Icon(Icons.favorite_border, size: 16),
+                  label: const Text('Unterstützen'),
+                  style: TextButton.styleFrom(foregroundColor: HbcColors.gold),
+                ),
+                TextButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const LegalScreen()),
+                  ),
+                  icon: const Icon(Icons.gavel_outlined, size: 16),
+                  label: const Text('Rechtliches'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: HbcColors.inkMuted,
+                  ),
+                ),
+              ],
             ),
           ],
         ),

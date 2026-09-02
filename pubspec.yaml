@@ -96,6 +96,8 @@ flutter:
   assets:
     - assets/brand/logo_1024.png
     - assets/brand/icon_foreground.png
+    - docs/legal/PRIVACY.de.md
+    - docs/legal/IMPRESSUM.md
 
   # To add assets to your application, add an assets section, like this:
   # assets:
