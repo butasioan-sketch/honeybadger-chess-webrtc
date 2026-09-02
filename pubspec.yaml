@@ -51,6 +51,35 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.7
+
+# Icon-Quelle: das von Jonny abgenommene Siegel-Logo. Adaptive Icon nutzt
+# icon_foreground.png (auf ~70% skaliert, transparent gepolstert, damit der
+# Ring nicht vom Android-Masken-Zuschnitt abgeschnitten wird) vor einem
+# Hintergrund in derselben Farbe wie im Logo selbst - Legacy/iOS/Web
+# bekommen das volle, randlose Siegel.
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/brand/logo_1024.png
+  adaptive_icon_background: "#0A0A0A"
+  adaptive_icon_foreground: assets/brand/icon_foreground.png
+  web:
+    generate: true
+    image_path: assets/brand/logo_1024.png
+    background_color: "#0A0A0A"
+    theme_color: "#C9A227"
+
+flutter_native_splash:
+  color: "#0A0A0A"
+  image: assets/brand/icon_foreground.png
+  android_12:
+    image: assets/brand/icon_foreground.png
+    color: "#0A0A0A"
+  android: true
+  ios: true
+  web: false
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -62,6 +91,10 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/brand/logo_1024.png
+    - assets/brand/icon_foreground.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
