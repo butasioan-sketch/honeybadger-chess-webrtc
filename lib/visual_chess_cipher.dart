@@ -1,10 +1,11 @@
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:chess/chess.dart' as ch;
 import 'package:cryptography/cryptography.dart';
-import 'package:flutter/foundation.dart' show compute, visibleForTesting;
+import 'package:meta/meta.dart' show visibleForTesting;
 
 /// Der "visuelle Cipher": eine mit Passwort verschluesselte Nachricht wird
 /// als Folge legaler Schachzuege ab der Grundstellung dargestellt (UCI-
@@ -60,15 +61,17 @@ Future<List<int>> _deriveKeyBytesInIsolate(KdfRequest req) async {
 }
 
 /// Fuehrt die PBKDF2-Berechnung aus - per Default in einem separaten
-/// Isolate ueber [compute], damit die rechenintensiven Runden nicht die UI
-/// blockieren. `compute()` haengt sich innerhalb von `testWidgets()`
+/// Isolate ueber [Isolate.run] (reines `dart:isolate`, kein Flutter-Import
+/// noetig - Audit S6: der Cipher-Core soll eine reine Dart-Bibliothek
+/// bleiben), damit die rechenintensiven Runden nicht die UI blockieren.
+/// Isolates haengen sich innerhalb von `testWidgets()`
 /// (TestWidgetsFlutterBinding) nachweislich auf (bestaetigt mit einem
 /// Minimal-Repro ganz ohne Cipher-Code - ein Flutter-Testumgebungs-Problem,
 /// kein Fehler in dieser Datei); Widget-Tests koennen diese Funktion daher
 /// durch eine Variante ohne echtes Isolate ersetzen.
 @visibleForTesting
 Future<List<int>> Function(KdfRequest request) deriveKeyBytesRunner = (req) =>
-    compute(_deriveKeyBytesInIsolate, req);
+    Isolate.run(() => _deriveKeyBytesInIsolate(req));
 
 /// Direkter Aufruf ohne Isolate - fuer Tests, die [deriveKeyBytesRunner]
 /// ueberschreiben wollen.
@@ -192,6 +195,18 @@ BigInt _movesToBigInt(List<String> moves) {
 
 const int _maxEncodeAttempts = 20;
 
+/// Audit S5: minPassphraseLength wurde bisher nur in der UI geprueft
+/// (cipher_screen.dart) - der Core selbst nahm jedes Passwort klaglos an,
+/// auch ein einzelnes Zeichen. Jetzt gilt die Grenze unabhaengig vom
+/// Aufrufer immer.
+void _requireMinPassphraseLength(String passphrase) {
+  if (passphrase.length < minPassphraseLength) {
+    throw VisualChessCipherError(
+      'Passwort zu kurz (mind. $minPassphraseLength Zeichen).',
+    );
+  }
+}
+
 /// Verschluesselt [plainText] mit [passphrase] und kodiert das Ergebnis als
 /// Folge legaler Schachzuege ab der Grundstellung.
 ///
@@ -203,6 +218,7 @@ Future<List<String>> encodeTextAsMoves(
   String plainText,
   String passphrase,
 ) async {
+  _requireMinPassphraseLength(passphrase);
   VisualChessCipherError? lastError;
   for (var attempt = 0; attempt < _maxEncodeAttempts; attempt++) {
     final salt = _randomBytes(_saltLength);
@@ -232,6 +248,17 @@ Future<List<String>> encodeTextAsMoves(
 /// [VisualChessCipherError] bei ungueltigen Zuegen, falschem Passwort oder
 /// beschaedigten Daten.
 Future<String> decodeMovesAsText(List<String> moves, String passphrase) async {
+  _requireMinPassphraseLength(passphrase);
+  // Audit S8: der Encoder cappt bei maxCipherPlies, aber eine von aussen
+  // hereingereichte Zugliste (z.B. eingetippt oder aus einer manipulierten
+  // Quelle) koennte beliebig lang sein - ohne diese Pruefung wuerde
+  // _movesToBigInt versuchen, sie komplett zu verarbeiten (DoS).
+  if (moves.length > maxCipherPlies) {
+    throw VisualChessCipherError(
+      'Zu viele Zuege fuer den visuellen Cipher (Limit: $maxCipherPlies '
+      'Halbzuege).',
+    );
+  }
   final framed = _bigIntToBytes(_movesToBigInt(moves));
   if (framed.length < 5 || framed[0] != 0x01) {
     throw VisualChessCipherError(

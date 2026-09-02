@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:honey_badger_chess/visual_chess_cipher.dart';
 
+const _pw = 'test-passwort'; // >= minPassphraseLength (8), fuer alle Tests
+
 void main() {
   group('encodeTextAsMoves / decodeMovesAsText', () {
     test('Round-Trip liefert den urspruenglichen Text zurueck', () async {
@@ -13,20 +15,20 @@ void main() {
     });
 
     test('leerer Text laesst sich verschluesseln und entschluesseln', () async {
-      final moves = await encodeTextAsMoves('', 'pw');
-      final decoded = await decodeMovesAsText(moves, 'pw');
+      final moves = await encodeTextAsMoves('', _pw);
+      final decoded = await decodeMovesAsText(moves, _pw);
       expect(decoded, '');
     });
 
     test('Unicode/Sonderzeichen ueberleben den Round-Trip', () async {
       const text = 'Schach♞ & Mätt – "Zitat" 🦡';
-      final moves = await encodeTextAsMoves(text, 'pw');
-      final decoded = await decodeMovesAsText(moves, 'pw');
+      final moves = await encodeTextAsMoves(text, _pw);
+      final decoded = await decodeMovesAsText(moves, _pw);
       expect(decoded, text);
     });
 
     test('jeder erzeugte Zug ist ein gueltiges UCI-artiges Format', () async {
-      final moves = await encodeTextAsMoves('Testnachricht', 'pw');
+      final moves = await encodeTextAsMoves('Testnachricht', _pw);
       for (final m in moves) {
         expect(
           RegExp(r'^[a-h][1-8][a-h][1-8][qrbn]?$').hasMatch(m),
@@ -38,33 +40,36 @@ void main() {
 
     test('zwei Verschluesselungen derselben Nachricht ergeben wegen '
         'zufaelligem Salz unterschiedliche Zugfolgen', () async {
-      final a = await encodeTextAsMoves('gleicher text', 'pw');
-      final b = await encodeTextAsMoves('gleicher text', 'pw');
+      final a = await encodeTextAsMoves('gleicher text', _pw);
+      final b = await encodeTextAsMoves('gleicher text', _pw);
       expect(a, isNot(equals(b)));
     });
 
     test('falsches Passwort wirft VisualChessCipherError statt falschem '
         'Klartext', () async {
-      final moves = await encodeTextAsMoves('geheime Nachricht', 'richtig');
+      final moves = await encodeTextAsMoves(
+        'geheime Nachricht',
+        'geheim-richtig',
+      );
       expect(
-        () => decodeMovesAsText(moves, 'falsch'),
+        () => decodeMovesAsText(moves, 'geheim-falsch'),
         throwsA(isA<VisualChessCipherError>()),
       );
     });
 
     test('manipulierte Zugfolge wirft VisualChessCipherError', () async {
-      final moves = await encodeTextAsMoves('hallo', 'pw');
+      final moves = await encodeTextAsMoves('hallo', _pw);
       final tampered = [...moves];
       tampered[0] = 'a1a1'; // kein legaler Eroeffnungszug
       expect(
-        () => decodeMovesAsText(tampered, 'pw'),
+        () => decodeMovesAsText(tampered, _pw),
         throwsA(isA<VisualChessCipherError>()),
       );
     });
 
     test('leere Zugliste wirft VisualChessCipherError beim Decode', () async {
       expect(
-        () => decodeMovesAsText([], 'pw'),
+        () => decodeMovesAsText([], _pw),
         throwsA(isA<VisualChessCipherError>()),
       );
     });
@@ -78,5 +83,57 @@ void main() {
         expect(decoded, text);
       }
     });
+  });
+
+  group('Passwortlaenge im Core (Audit S5)', () {
+    test('encodeTextAsMoves lehnt ein zu kurzes Passwort ab', () async {
+      expect(
+        () => encodeTextAsMoves('hallo', 'kurz'),
+        throwsA(isA<VisualChessCipherError>()),
+      );
+    });
+
+    test('decodeMovesAsText lehnt ein zu kurzes Passwort ab, bevor es '
+        'ueberhaupt Zuege verarbeitet', () async {
+      // Eine leere Zugliste wuerde ohnehin einen Fehler werfen (siehe
+      // oben) - hier zaehlt, dass die Passwortlaenge zuerst geprueft wird
+      // und die Fehlermeldung entsprechend lautet.
+      await expectLater(
+        decodeMovesAsText([], '1234567'), // 7 Zeichen, zu kurz
+        throwsA(
+          isA<VisualChessCipherError>().having(
+            (e) => e.message,
+            'message',
+            contains('Passwort zu kurz'),
+          ),
+        ),
+      );
+    });
+
+    test(
+      'genau minPassphraseLength Zeichen werden akzeptiert (Grenzwert)',
+      () async {
+        final passphrase = 'a' * minPassphraseLength;
+        final moves = await encodeTextAsMoves('grenzwertig', passphrase);
+        final decoded = await decodeMovesAsText(moves, passphrase);
+        expect(decoded, 'grenzwertig');
+      },
+    );
+  });
+
+  group('Decode-Cap gegen ueberlange Zugliste (Audit S8)', () {
+    test(
+      'mehr als maxCipherPlies Zuege werden ohne Verarbeitung abgelehnt',
+      () async {
+        final tooMany = List<String>.generate(
+          maxCipherPlies + 1,
+          (_) => 'e2e4',
+        );
+        await expectLater(
+          decodeMovesAsText(tooMany, _pw),
+          throwsA(isA<VisualChessCipherError>()),
+        );
+      },
+    );
   });
 }
