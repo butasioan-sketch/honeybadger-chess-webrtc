@@ -1,0 +1,14 @@
+# Vorlage fuer android/key.properties - diese Datei selbst ist NICHT
+# geheim und gehoert ins Repo. Die echte key.properties (ohne ".example")
+# ist bereits in android/.gitignore ausgeschlossen und darf nie committet
+# werden - genau wie die .jks/.keystore-Datei selbst.
+#
+# So legst du deine echte android/key.properties an:
+#   cp android/key.properties.example android/key.properties
+# und traegst dann die echten Werte ein. Siehe docs/RELEASE.md fuer den
+# kompletten Ablauf inkl. keytool-Befehl.
+
+storeFile=/absoluter/pfad/ausserhalb/des/repos/upload-keystore.jks
+storePassword=CHANGE_ME
+keyAlias=upload
+keyPassword=CHANGE_ME
